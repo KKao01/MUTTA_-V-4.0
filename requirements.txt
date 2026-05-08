@@ -7,3 +7,4 @@ pypdf
 pdfplumber
 openpyxl
 reportlab
+PyMuPDF
