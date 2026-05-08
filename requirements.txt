@@ -2,5 +2,8 @@ fastapi
 uvicorn[standard]
 python-multipart
 jinja2
+Pillow
+pypdf
+pdfplumber
 openpyxl
-pandas
+reportlab
