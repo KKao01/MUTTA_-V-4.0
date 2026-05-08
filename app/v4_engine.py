@@ -85,6 +85,14 @@ def _find_cjk_font() -> str:
     import sys as _sys
     candidates = []
 
+    # === 部署環境優先：先檢查 repo 根目錄的字型（與 core_logic 自動下載位置一致） ===
+    project_root_font = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "NotoSansCJK-Bold.ttc"
+    )
+    if os.path.exists(project_root_font):
+        return project_root_font
+
     if _sys.platform == "win32":
         # Windows：優先使用微軟正黑體 / 新細明體 / 標楷體
         win_root = os.environ.get("SystemRoot", "C:\\Windows")
