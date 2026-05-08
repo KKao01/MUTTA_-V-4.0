@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>沐塔 MUTTA｜分單系統 V4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f4f5f7; --card:#fff; --text:#1a1a2e; --sub:#6b7280;
+    --border:#e5e7eb; --radius:14px;
+    --pdf-color:#3b82f6; --xlsx-color:#10b981; --csv-color:#f59e0b;
+    --accent:#1a1a2e; --blue:#1d72f5;
+    /* 主色：依 body.shipper-* 切換（7-11 綠 / 順豐紅）*/
+    --sf-red:#00813C;
+  }
+  body.shipper-seven { --sf-red:#00813C; }
+  body.shipper-sf    { --sf-red:#e31837; }
+  .dark { --bg:#111827; --card:#1f2937; --text:#f9fafb; --sub:#9ca3af; --border:#374151; --accent:#f9fafb; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Noto Sans TC',sans-serif; min-height:100vh; transition:background .3s,color .3s; }
+
+  /* Header */
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 32px; background:var(--card); border-bottom:1px solid var(--border); box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .logo { display:flex; align-items:center; gap:14px; }
+  .logo-badge { background:var(--sf-red); color:#fff; border-radius:8px; padding:6px 8px; display:flex; flex-direction:column; align-items:center; line-height:1.1; cursor:pointer; }
+  .logo-badge .sf { font-size:13px; font-weight:600; letter-spacing:0; white-space:nowrap; }
+  .logo-badge .express { font-size:7px; letter-spacing:2px; font-weight:600; margin-top:2px; }
+  .logo-badge .speed { font-size:6px; letter-spacing:1px; opacity:.85; margin-top:2px; }
+  .logo-info h1 { font-size:15px; font-weight:700; }
+  .logo-info p { font-size:11px; color:var(--sf-red); font-weight:600; letter-spacing:1px; }
+  .header-right { display:flex; align-items:center; gap:10px; }
+  .btn-sm { padding:7px 16px; border-radius:20px; border:1px solid var(--border); background:none; color:var(--sub); font-size:12px; cursor:pointer; transition:all .2s; }
+  .btn-sm:hover { background:var(--border); color:var(--text); }
+
+  /* Main */
+  main { max-width:960px; margin:48px auto; padding:0 24px; }
+  .section-label { font-size:11px; font-weight:600; letter-spacing:3px; color:var(--sub); text-transform:uppercase; margin-bottom:16px; }
+
+  /* Shipper 切換鈕（左上角）*/
+  .shipper-switch { display:inline-flex; gap:0; background:var(--bg); border:1px solid var(--border); border-radius:20px; padding:3px; margin-left:14px; }
+  .shipper-switch button { padding:5px 14px; border:none; background:none; font-size:12px; font-weight:600; color:var(--sub); border-radius:18px; cursor:pointer; transition:all .2s; font-family:inherit; }
+  .shipper-switch button.active { background:var(--sf-red); color:#fff; }
+  .shipper-switch button:not(.active):hover { color:var(--text); }
+
+  /* Upload Grid */
+  .upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
+  body.shipper-sf .upload-grid { grid-template-columns:1fr 1fr 1fr; }
+  body.shipper-seven .csv-card { display:none !important; }
+  .upload-card { background:var(--card); border:2px dashed var(--border); border-radius:var(--radius); padding:32px 20px 24px; cursor:pointer; transition:all .2s; position:relative; display:flex; flex-direction:column; align-items:center; text-align:center; gap:10px; }
+  .upload-card:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.08); }
+  .upload-card.pdf-card:hover  { border-color:var(--pdf-color); }
+  .upload-card.xlsx-card:hover { border-color:var(--xlsx-color); }
+  .upload-card.csv-card:hover  { border-color:var(--csv-color); }
+  .upload-card.pdf-card.has-file  { border-style:solid; border-color:var(--pdf-color);  background:color-mix(in srgb,var(--pdf-color) 6%,var(--card)); }
+  .upload-card.xlsx-card.has-file { border-style:solid; border-color:var(--xlsx-color); background:color-mix(in srgb,var(--xlsx-color) 6%,var(--card)); }
+  .upload-card.csv-card.has-file  { border-style:solid; border-color:var(--csv-color);  background:color-mix(in srgb,var(--csv-color) 6%,var(--card)); }
+  .upload-card input[type=file] { display:none; }
+  .card-tag { position:absolute; top:-1px; left:50%; transform:translateX(-50%); font-size:10px; font-weight:700; letter-spacing:1.5px; padding:3px 16px; border-radius:0 0 8px 8px; color:#fff; white-space:nowrap; }
+  .pdf-card  .card-tag { background:var(--pdf-color); }
+  .xlsx-card .card-tag { background:var(--xlsx-color); }
+  .csv-card  .card-tag { background:var(--csv-color); }
+  .card-icon { font-size:40px; margin-top:8px; }
+  .card-title { font-size:15px; font-weight:700; }
+  .card-sub { font-size:12px; color:var(--sub); line-height:1.6; }
+  .file-name { font-weight:600; word-break:break-all; }
+  .pdf-card  .file-name { color:var(--pdf-color); }
+  .xlsx-card .file-name { color:var(--xlsx-color); }
+  .csv-card  .file-name { color:var(--csv-color); }
+  .card-hint { font-size:11px; color:var(--sub); border:1px solid var(--border); border-radius:20px; padding:3px 12px; cursor:pointer; background:none; transition:all .2s; }
+  .card-hint:hover { background:var(--border); }
+
+  /* File list */
+  .file-list { width:100%; display:flex; flex-direction:column; gap:5px; margin-top:4px; }
+  .file-item { display:flex; align-items:center; justify-content:space-between; padding:5px 10px; background:var(--bg); border:1px solid var(--border); border-radius:8px; font-size:11px; color:var(--sub); }
+  .file-item-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-item-size { color:var(--sub); margin:0 6px; flex-shrink:0; }
+  .file-item-del { background:none; border:none; cursor:pointer; color:var(--sub); font-size:12px; padding:0 2px; transition:color .15s; }
+  .file-item-del:hover { color:var(--sf-red); }
+
+  /* Options */
+  .options-bar { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 24px; display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .toggle { position:relative; width:40px; height:22px; flex-shrink:0; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .slider { position:absolute; inset:0; background:var(--border); border-radius:11px; cursor:pointer; transition:.3s; }
+  .slider:before { content:''; position:absolute; width:16px; height:16px; border-radius:50%; background:#fff; left:3px; top:3px; transition:.3s; }
+  input:checked + .slider { background:var(--sf-red); }
+  input:checked + .slider:before { transform:translateX(18px); }
+  .toggle-label { font-size:13px; font-weight:500; }
+  .gift-badge { font-size:11px; font-weight:600; padding:3px 12px; border-radius:20px; background:#fee2e2; color:var(--sf-red); transition:all .3s; }
+
+  /* Progress */
+  #progress-section { display:none; margin-bottom:16px; }
+  .progress-bar-wrap { background:var(--border); border-radius:99px; height:5px; margin-bottom:12px; overflow:hidden; }
+  .progress-bar { height:100%; background:var(--sf-red); border-radius:99px; transition:width .3s; }
+  .log-box { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; max-height:160px; overflow-y:auto; font-size:12px; font-family:'Consolas',monospace; }
+  .log-line { padding:2px 0; color:var(--sub); }
+  .log-line.ok { color:#10b981; }
+  .log-line.err { color:var(--sf-red); }
+  .log-line.warn { color:#f59e0b; }
+
+  /* Result */
+  #result-section { display:none; margin-bottom:16px; }
+  .result-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .result-title { font-size:16px; font-weight:700; }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:13px; font-weight:500; cursor:pointer; border:none; transition:all .15s; }
+  .btn-secondary { background:var(--border); color:var(--text); border:1px solid var(--border); }
+  .btn-secondary:hover { opacity:.8; }
+  .btn-accent { background:var(--sf-red); color:#fff; }
+  .btn-accent:hover { opacity:.85; }
+  .result-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+  .result-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; display:flex; flex-direction:column; gap:6px; }
+  .result-card.special { border-color:#f59e0b; background:color-mix(in srgb,#f59e0b 8%,var(--card)); }
+  .result-cat { font-weight:700; font-size:14px; }
+  .result-gift { font-size:12px; color:var(--sub); }
+  .result-meta { display:flex; gap:8px; font-size:11px; color:var(--sub); }
+  .result-download { margin-top:4px; padding:6px 12px; background:color-mix(in srgb,var(--sf-red) 10%,var(--card)); color:var(--sf-red); border:1px solid color-mix(in srgb,var(--sf-red) 30%,transparent); border-radius:8px; font-size:12px; font-weight:500; cursor:pointer; text-align:center; text-decoration:none; transition:all .15s; }
+  .result-download:hover { background:var(--sf-red); color:#fff; }
+
+  /* Button */
+  .btn-start { width:100%; padding:17px; border:none; border-radius:var(--radius); background:var(--accent); color:var(--bg); font-size:15px; font-weight:700; letter-spacing:1px; cursor:pointer; transition:all .2s; }
+  .btn-start:hover:not(:disabled) { opacity:.85; transform:translateY(-1px); }
+  .btn-start:disabled { opacity:.35; cursor:not-allowed; transform:none; }
+
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center; }
+  .modal-overlay.show { display:flex; }
+  .modal { background:var(--card); border-radius:var(--radius); padding:28px 28px 24px; max-width:520px; width:92%; position:relative; max-height:92vh; overflow-y:auto; }
+  .modal-close-x { position:absolute; top:16px; right:16px; background:var(--bg); border:none; border-radius:50%; width:28px; height:28px; font-size:14px; cursor:pointer; color:var(--sub); display:flex; align-items:center; justify-content:center; }
+  .modal-close-x:hover { background:var(--border); }
+  .modal-header h3 { font-size:17px; font-weight:700; }
+  .modal-header p { font-size:12px; color:var(--sub); margin-top:3px; }
+  .steps-bar { display:flex; gap:4px; margin:14px 0 18px; }
+  .step-seg { flex:1; height:4px; border-radius:2px; background:var(--border); transition:background .3s; }
+  .step-seg.active { background:var(--blue); }
+  .step-content { display:none; }
+  .step-content.active { display:block; }
+
+  /* Mock UI */
+  .mock-ui { background:#f8faff; border-radius:10px; padding:12px 14px; border:1px solid #dde8ff; margin-bottom:14px; }
+  .mock-tabs { display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap; border-bottom:1px solid var(--border); padding-bottom:8px; }
+  .mock-tab { font-size:10.5px; padding:3px 10px; border-radius:4px; color:#555; cursor:default; white-space:nowrap; }
+  .mock-tab.active { background:#e8f0fe; color:var(--blue); font-weight:700; }
+  .mock-toolbar { display:flex; gap:5px; margin-bottom:10px; flex-wrap:wrap; align-items:center; }
+  .mock-count-badge { font-size:10px; padding:4px 10px; border-radius:6px; background:#e8f0fe; color:var(--blue); font-weight:600; white-space:nowrap; }
+  .mock-tool-btn { font-size:10px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--card); color:var(--sub); cursor:default; white-space:nowrap; }
+  .mock-tool-btn.export-btn { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:600; position:relative; }
+  .export-arrow { position:absolute; top:-20px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:1px; }
+  .export-label { font-size:9px; background:var(--blue); color:#fff; padding:1px 6px; border-radius:3px; white-space:nowrap; }
+  .export-arrow-icon { color:var(--blue); font-size:12px; line-height:1; }
+  .mock-table { width:100%; border-collapse:collapse; }
+  .mock-table th { font-size:10px; color:var(--sub); font-weight:600; padding:4px 6px; border-bottom:1px solid var(--border); text-align:left; }
+  .mock-table td { font-size:10px; padding:4px 6px; border-bottom:1px solid #f0f0f0; color:var(--text); }
+  .mock-table tr:last-child td { border:none; }
+  .mock-cb { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .mock-cb.on { background:var(--blue); }
+  .mock-cb.off { background:var(--border); }
+  .mock-order-id { font-family:monospace; font-size:10px; }
+  .mock-total-row { font-size:10px; color:var(--sub); margin-top:8px; padding-top:6px; border-top:1px solid var(--border); }
+  .step-instructions { display:flex; flex-direction:column; gap:7px; margin-top:2px; }
+  .step-inst { display:flex; align-items:flex-start; gap:9px; font-size:13px; }
+  .inst-num { background:var(--blue); color:#fff; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+  .inst-text strong { font-weight:700; }
+  .mock-dialog { background:var(--card); border-radius:10px; padding:18px 18px 14px; border:1px solid var(--border); margin-bottom:14px; box-shadow:0 4px 20px rgba(0,0,0,.1); }
+  .mock-dialog-title { font-size:13px; font-weight:700; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  .mock-x { color:var(--sub); font-size:14px; }
+  .mock-field { margin-bottom:12px; }
+  .mock-field-label { font-size:10px; color:var(--sf-red); font-weight:700; margin-bottom:5px; }
+  .mock-select-row { display:flex; align-items:center; gap:8px; }
+  .mock-select-box { flex:1; border:2px solid var(--blue); border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+  .mock-select-dropdown { flex:1; border:1.5px solid var(--blue); border-radius:6px; padding:7px 12px; font-size:12px; font-weight:500; display:flex; justify-content:space-between; align-items:center; background:var(--card); }
+  .mock-select-dropdown-plain { flex:1; border:1px solid var(--border); border-radius:6px; padding:7px 12px; font-size:12px; color:var(--sub); display:flex; justify-content:space-between; align-items:center; background:var(--bg); }
+  .mock-input-plain { flex:1; border:1px solid var(--border); border-radius:6px; padding:7px 12px; font-size:12px; color:var(--border); background:var(--bg); }
+  .num-badge { background:var(--blue); color:#fff; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .mock-format-row { display:flex; gap:8px; flex:1; }
+  .mock-fmt-btn { flex:1; padding:6px; border-radius:6px; font-size:12px; font-weight:600; text-align:center; border:2px solid var(--border); background:var(--bg); color:var(--sub); cursor:default; }
+  .mock-fmt-btn.sel { border-color:var(--blue); background:#eff6ff; color:var(--blue); }
+  .mock-dialog-footer { display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+  .mock-footer-count { font-size:10px; color:var(--sub); }
+  .mock-footer-btns { display:flex; gap:6px; }
+  .mock-cancel { padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:none; color:var(--sub); font-size:11px; cursor:default; }
+  .mock-submit { padding:5px 14px; border-radius:6px; background:var(--blue); color:#fff; font-size:11px; font-weight:600; border:none; cursor:default; display:flex; align-items:center; gap:5px; }
+  .chevron { font-size:10px; color:var(--sub); }
+  .modal-footer { display:flex; justify-content:space-between; align-items:center; margin-top:18px; }
+  .step-indicator { font-size:12px; color:var(--sub); }
+  .modal-nav { display:flex; gap:8px; }
+  .btn-prev { padding:8px 16px; border:1px solid var(--border); border-radius:8px; background:none; color:var(--text); font-size:13px; cursor:pointer; }
+  .btn-prev:hover { background:var(--border); }
+  .btn-next { padding:8px 20px; border:none; border-radius:8px; background:var(--blue); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  .btn-next:hover { opacity:.85; }
+  .btn-done { padding:8px 20px; border:none; border-radius:8px; background:#10b981; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  .btn-done:hover { opacity:.85; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-badge" id="dev-trigger" title="">
+      <span class="sf"   id="logo-line1">7-ELEVEN</span>
+      <span class="express" id="logo-line2">CONVENIENCE</span>
+      <span class="speed" id="logo-line3">STORE 24H</span>
+    </div>
+    <div class="logo-info">
+      <h1>Mutta沐塔分單系統</h1>
+      <p id="logo-sub">超商模式 V4</p>
+    </div>
+    <div class="shipper-switch" role="tablist" aria-label="物流模式">
+      <button id="btn-shipper-seven" class="active" onclick="switchShipper('seven')">7-11</button>
+      <button id="btn-shipper-sf"                  onclick="switchShipper('sf')">順豐</button>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn-sm" onclick="toggleTheme()" id="themeBtn">🌙 暗色</button>
+    <button class="btn-sm" onclick="location.href='/dev'">⚙️ 開發者設定</button>
+  </div>
+</header>
+
+<main>
+  <p class="section-label">上傳訂單檔案</p>
+
+  <div class="upload-grid">
+    <!-- PDF -->
+    <div class="upload-card pdf-card" id="box-pdf" onclick="triggerUpload('pdf')">
+      <span class="card-tag">PDF 宅配出貨單</span>
+      <div class="card-icon">📄</div>
+      <div class="card-title">點擊或拖曳 PDF</div>
+      <div class="card-sub">可多次新增，支援合併</div>
+      <input type="file" id="input-pdf" accept=".pdf" multiple onchange="onFile('pdf',this)">
+      <div class="file-list" id="list-pdf"></div>
+    </div>
+
+    <!-- Excel -->
+    <div class="upload-card xlsx-card" id="box-excel" onclick="triggerUpload('excel')">
+      <span class="card-tag">Excel 訂單明細</span>
+      <div class="card-icon">📊</div>
+      <div class="card-title">點擊或拖曳 Excel</div>
+      <div class="card-sub">可多次新增，支援合併</div>
+      <button class="card-hint" id="hintXlsx">？ 如何匯出訂單明細</button>
+      <input type="file" id="input-excel" accept=".xlsx,.xls" multiple onchange="onFile('excel',this)">
+      <div class="file-list" id="list-excel"></div>
+    </div>
+
+    <!-- CSV（順豐模式才顯示）-->
+    <div class="upload-card csv-card" id="box-csv" onclick="triggerUpload('csv')">
+      <span class="card-tag">CSV 順豐收件資料</span>
+      <div class="card-icon">📋</div>
+      <div class="card-title">點擊或拖曳 CSV</div>
+      <div class="card-sub">含收件人姓名、手機、地址</div>
+      <input type="file" id="input-csv" accept=".csv" multiple onchange="onFile('csv',this)">
+      <div class="file-list" id="list-csv"></div>
+    </div>
+  </div>
+
+  <!-- Options -->
+  <div class="options-bar">
+    <label class="toggle">
+      <input type="checkbox" id="giftToggle" onchange="updateGiftBadge()">
+      <span class="slider"></span>
+    </label>
+    <span class="toggle-label">列印贈品資訊</span>
+    <span class="gift-badge" id="giftBadge">關閉，不印贈品</span>
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-section">
+    <div class="section-title">處理進度</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+    </div>
+    <div class="log-box" id="log-box"></div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section">
+    <div class="result-header">
+      <div class="result-title">分單結果</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="resetAll()">重新上傳</button>
+        <button class="btn btn-accent" id="btn-download-all">⬇ 全部下載</button>
+      </div>
+    </div>
+    <div class="result-grid" id="result-grid"></div>
+  </div>
+
+  <button class="btn-start" id="btn-start" onclick="startProcess()" disabled>請上傳 PDF 與 Excel</button>
+</main>
+
+<!-- Modal XLSX -->
+<div class="modal-overlay" id="modalXlsx">
+  <div class="modal">
+    <button class="modal-close-x" onclick="closeModal('xlsx')">✕</button>
+    <div class="modal-header"><h3>如何匯出訂單明細 Excel</h3><p>91APP 後台操作步驟</p></div>
+    <div class="steps-bar"><div class="step-seg active" id="xseg0"></div><div class="step-seg" id="xseg1"></div></div>
+    <div class="step-content active" id="xstep0">
+      <div class="mock-ui">
+        <div class="mock-tabs"><div class="mock-tab">全部</div><div class="mock-tab active">處理中</div><div class="mock-tab">備貨中</div><div class="mock-tab">已出貨</div><div class="mock-tab">退換貨</div><div class="mock-tab">結案或取消</div></div>
+        <div class="mock-toolbar">
+          <div class="mock-count-badge">已選擇 OO 筆</div>
+          <div class="mock-tool-btn">取消訂單</div><div class="mock-tool-btn">列印</div>
+          <div class="mock-tool-btn export-btn" style="position:relative;margin-top:22px"><div class="export-arrow"><div class="export-label">點擊匯出</div><div class="export-arrow-icon">↓</div></div>匯出</div>
+          <div class="mock-tool-btn">稽核</div><div class="mock-tool-btn">變更狀態</div><div class="mock-tool-btn">延行寄貨</div><div class="mock-tool-btn">篩選</div>
+        </div>
+        <table class="mock-table">
+          <tr><th></th><th>訂單編號</th><th>繳款狀態</th><th>運送狀態</th><th>付款方式</th></tr>
+          <tr><td><span class="mock-cb on"></span></td><td class="mock-order-id">WXXXXX001</td><td>等待付款</td><td>未出貨</td><td>取貨付款</td></tr>
+          <tr><td><span class="mock-cb on"></span></td><td class="mock-order-id">WXXXXX002</td><td>刷卡完成</td><td>未出貨</td><td>Apple Pay</td></tr>
+          <tr><td><span class="mock-cb on"></span></td><td class="mock-order-id">WXXXXX003</td><td>等待付款</td><td>未出貨</td><td>LINE Pay</td></tr>
+          <tr><td><span class="mock-cb off"></span></td><td class="mock-order-id" style="color:var(--border)">WXXXXX004</td><td></td><td></td><td></td></tr>
+          <tr><td><span class="mock-cb off"></span></td><td class="mock-order-id" style="color:var(--border)">WXXXXX005</td><td></td><td></td><td></td></tr>
+        </table>
+        <div class="mock-total-row">總共 OO 筆</div>
+      </div>
+      <div class="step-instructions">
+        <div class="step-inst"><div class="inst-num">1</div><div class="inst-text">確定選好要列印的資料</div></div>
+        <div class="step-inst"><div class="inst-num">2</div><div class="inst-text">工具列出現「<strong>匯出</strong>」按鈕，點擊它</div></div>
+      </div>
+    </div>
+    <div class="step-content" id="xstep1">
+      <div class="mock-dialog">
+        <div class="mock-dialog-title">匯出訂單 <span class="mock-x">✕</span></div>
+        <div class="mock-field"><div class="mock-field-label">* 匯出欄位</div><div class="mock-select-row"><div class="mock-select-box">分單系統 <span style="color:var(--blue)">✓</span></div><div class="num-badge">1</div></div></div>
+        <div class="mock-field"><div class="mock-field-label">* 檔案格式</div><div class="mock-select-row"><div class="mock-format-row"><div class="mock-fmt-btn">CSV</div><div class="mock-fmt-btn sel">Excel (XLSX)</div></div><div class="num-badge">2</div></div></div>
+        <div class="mock-dialog-footer"><span class="mock-footer-count">已應取 OO 筆訂單</span><div class="mock-footer-btns"><div class="mock-cancel">取消</div><div class="mock-submit">匯出訂單 <div class="num-badge" style="background:#fff;color:var(--blue);width:16px;height:16px;font-size:10px">3</div></div></div></div>
+      </div>
+      <div class="step-instructions">
+        <div class="step-inst"><div class="inst-num">1</div><div class="inst-text">匯出欄位選「<strong>分單系統</strong>」</div></div>
+        <div class="step-inst"><div class="inst-num">2</div><div class="inst-text">檔案格式選「<strong>Excel (XLSX)</strong>」</div></div>
+        <div class="step-inst"><div class="inst-num">3</div><div class="inst-text">點「<strong>匯出訂單</strong>」下載 Excel 檔案</div></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="step-indicator" id="xIndicator">步驟 1 / 2</span>
+      <div class="modal-nav">
+        <button class="btn-prev" id="xPrev" onclick="modalNav('xlsx',-1)" style="display:none">← 上一步</button>
+        <button class="btn-next" id="xNext" onclick="modalNav('xlsx',1)">下一步 →</button>
+        <button class="btn-done" id="xDone" onclick="closeModal('xlsx')" style="display:none">了解了，開始上傳 ✓</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  狀態
+// ══════════════════════════════════════════════════════════
+let shipper = 'seven';                              // 'seven' | 'sf'
+let files = { pdf: null, excel: null, csv: null };  // 加入 csv
+let printGift = false;
+let jobId = null;
+let pollTimer = null;
+
+// ══════════════════════════════════════════════════════════
+//  Shipper 切換
+// ══════════════════════════════════════════════════════════
+const SHIPPER_PROFILE = {
+  seven: {
+    bodyClass: 'shipper-seven',
+    logo: ['7-ELEVEN', 'CONVENIENCE', 'STORE 24H'],
+    sub:  '超商模式 V4',
+    title:'沐塔 MUTTA｜分單系統 V4 — 超商',
+  },
+  sf: {
+    bodyClass: 'shipper-sf',
+    logo: ['SF', 'EXPRESS', 'SPEED & SAFETY'],
+    sub:  '順豐模式 V4',
+    title:'沐塔 MUTTA｜分單系統 V4 — 順豐',
+  },
+};
+
+function switchShipper(s) {
+  if (s !== 'seven' && s !== 'sf') return;
+  if (s === shipper) return;
+  shipper = s;
+  const p = SHIPPER_PROFILE[s];
+
+  // 套 body class
+  document.body.classList.remove('shipper-seven', 'shipper-sf');
+  document.body.classList.add(p.bodyClass);
+
+  // 改 logo 與副標
+  document.getElementById('logo-line1').textContent = p.logo[0];
+  document.getElementById('logo-line2').textContent = p.logo[1];
+  document.getElementById('logo-line3').textContent = p.logo[2];
+  document.getElementById('logo-sub').textContent   = p.sub;
+  document.title = p.title;
+
+  // 切換鈕狀態
+  document.getElementById('btn-shipper-seven').classList.toggle('active', s === 'seven');
+  document.getElementById('btn-shipper-sf').classList.toggle('active',    s === 'sf');
+
+  // 切換物流會清空所有上傳檔與進行中狀態（避免把 7-11 的檔誤帶到順豐流程）
+  if (jobId) {
+    fetch(`/api/cleanup/${jobId}`, { method: 'POST' }).catch(() => {});
+    jobId = null;
+  }
+  clearInterval(pollTimer);
+  files = { pdf: null, excel: null, csv: null };
+  ['pdf', 'excel', 'csv'].forEach(t => {
+    const inp = document.getElementById(`input-${t}`);
+    const box = document.getElementById(`box-${t}`);
+    const lst = document.getElementById(`list-${t}`);
+    if (inp) inp.value = '';
+    if (box) box.classList.remove('has-file');
+    if (lst) lst.innerHTML = '';
+  });
+  const ps = document.getElementById('progress-section');
+  if (ps) ps.style.display = 'none';
+  const rs = document.getElementById('result-section');
+  if (rs) rs.style.display = 'none';
+  const logBox = document.getElementById('log-box');
+  if (logBox) logBox.innerHTML = '';
+
+  checkReady();
+}
+
+// 初始化：套上預設 shipper class
+document.body.classList.add(SHIPPER_PROFILE[shipper].bodyClass);
+
+// ══════════════════════════════════════════════════════════
+//  Dev 入口（連點5下）
+// ══════════════════════════════════════════════════════════
+let devClicks = 0, devTimer = null;
+document.getElementById('dev-trigger').addEventListener('click', () => {
+  devClicks++;
+  clearTimeout(devTimer);
+  devTimer = setTimeout(() => devClicks = 0, 1500);
+  if (devClicks >= 5) { devClicks = 0; location.href = '/dev'; }
+});
+
+// ══════════════════════════════════════════════════════════
+//  檔案上傳（支援多檔追加、單檔刪除）
+// ══════════════════════════════════════════════════════════
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function renderFileList(type) {
+  const list = document.getElementById(`list-${type}`);
+  const box  = document.getElementById(`box-${type}`);
+  const arr  = files[type] || [];
+  list.innerHTML = arr.map((f, i) => `
+    <div class="file-item">
+      <span class="file-item-name">📎 ${f.name}</span>
+      <span class="file-item-size">${formatSize(f.size)}</span>
+      <button class="file-item-del" onclick="event.stopPropagation();removeFile('${type}',${i})">✕</button>
+    </div>
+  `).join('');
+  box.classList.toggle('has-file', arr.length > 0);
+  checkReady();
+}
+
+function onFile(type, input) {
+  const newFiles = Array.from(input.files);
+  if (!newFiles.length) return;
+  if (!files[type]) files[type] = [];
+  files[type] = [...files[type], ...newFiles];
+  input.value = '';
+  renderFileList(type);
+}
+
+function removeFile(type, idx) {
+  files[type].splice(idx, 1);
+  if (!files[type].length) files[type] = null;
+  renderFileList(type);
+}
+
+function onDrag(e, boxId) {
+  e.preventDefault();
+  document.getElementById(boxId).classList.add('drag');
+}
+function offDrag(boxId) {
+  document.getElementById(boxId).classList.remove('drag');
+}
+function onDrop(e, type) {
+  e.preventDefault();
+  offDrag(`box-${type}`);
+  const newFiles = Array.from(e.dataTransfer.files);
+  if (!newFiles.length) return;
+  if (!files[type]) files[type] = [];
+  files[type] = [...files[type], ...newFiles];
+  renderFileList(type);
+}
+
+function checkReady() {
+  const btn = document.getElementById('btn-start');
+  if (shipper === 'sf') {
+    const ready = !!(files.pdf?.length && files.excel?.length && files.csv?.length);
+    btn.disabled = !ready;
+    btn.textContent = ready ? '開始分單' : '請上傳 PDF、Excel 與 CSV';
+  } else {
+    const ready = !!(files.pdf?.length && files.excel?.length);
+    btn.disabled = !ready;
+    btn.textContent = ready ? '開始分單' : '請上傳 PDF 與 Excel';
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  選項
+// ══════════════════════════════════════════════════════════
+function toggleGift() {
+  printGift = !printGift;
+  const t = document.getElementById('toggle-gift');
+  t.classList.toggle('on', printGift);
+}
+
+// ══════════════════════════════════════════════════════════
+//  開始分單
+// ══════════════════════════════════════════════════════════
+async function startProcess() {
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('progress-section').style.display = 'block';
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('log-box').innerHTML = '';
+  document.getElementById('progress-bar').style.width = '0%';
+
+  const fd = new FormData();
+  fd.append('shipper', shipper);
+  files.pdf.forEach(f => fd.append('pdf_files', f));
+  files.excel.forEach(f => fd.append('excel_files', f));
+  if (shipper === 'sf' && files.csv) {
+    files.csv.forEach(f => fd.append('csv_files', f));
+  }
+
+  try {
+    const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (!uploadRes.ok) throw new Error((await uploadRes.json()).detail);
+    const uploadData = await uploadRes.json();
+    jobId = uploadData.job_id;
+
+    addLog(`PDF：${uploadData.pdf_name}`);
+    if (uploadData.excel_name) addLog(`Excel：${uploadData.excel_name}`);
+    if (uploadData.csv_name)   addLog(`CSV：${uploadData.csv_name}`);
+
+    const pfd = new FormData();
+    pfd.append('print_gift', printGift ? 'true' : 'false');
+    const procRes = await fetch(`/api/process/${jobId}`, { method: 'POST', body: pfd });
+    if (!procRes.ok) throw new Error((await procRes.json()).detail);
+
+    pollTimer = setInterval(pollStatus, 800);
+  } catch(e) {
+    addLog(`錯誤：${e.message}`, 'err');
+    document.getElementById('btn-start').disabled = false;
+  }
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch(`/api/status/${jobId}`);
+    const data = await res.json();
+
+    document.getElementById('progress-bar').style.width = (data.progress || 0) + '%';
+
+    const logBox = document.getElementById('log-box');
+    const logCount = logBox.children.length;
+    const logs = data.logs || [];
+    for (let i = logCount; i < logs.length; i++) {
+      addLog(`[${logs[i].ts}] ${logs[i].msg}`, logs[i].tag);
+    }
+    logBox.scrollTop = logBox.scrollHeight;
+
+    if (data.status === 'done') {
+      clearInterval(pollTimer);
+      showResults(data.results || []);
+    } else if (data.status === 'error') {
+      clearInterval(pollTimer);
+      addLog(`❌ ${data.error}`, 'err');
+      document.getElementById('btn-start').disabled = false;
+    }
+  } catch(e) {}
+}
+
+function addLog(msg, tag='') {
+  const el = document.createElement('div');
+  el.className = `log-line ${tag}`;
+  el.textContent = msg;
+  document.getElementById('log-box').appendChild(el);
+}
+
+// ══════════════════════════════════════════════════════════
+//  顯示結果
+// ══════════════════════════════════════════════════════════
+function showResults(results) {
+  document.getElementById('result-section').style.display = 'block';
+  const grid = document.getElementById('result-grid');
+  grid.innerHTML = results.map(r => `
+    <div class="result-card ${r.special ? 'special' : ''}">
+      <div class="result-cat">${r.cat}</div>
+      ${r.gift ? `<div class="result-gift">${r.gift}</div>` : ''}
+      <div class="result-meta">
+        <span>${r.count} 筆</span>
+        <span>${r.pages} 頁</span>
+      </div>
+      <a class="result-download" href="${r.url}" download="${r.filename}">⬇ 下載</a>
+    </div>
+  `).join('');
+
+  document.getElementById('btn-download-all').onclick = () => {
+    location.href = `/api/download-all/${jobId}`;
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+//  重置
+// ══════════════════════════════════════════════════════════
+function resetAll() {
+  if (jobId) {
+    fetch(`/api/cleanup/${jobId}`, { method: 'POST' }).catch(() => {});
+    jobId = null;
+  }
+  clearInterval(pollTimer);
+  files = { pdf: null, excel: null, csv: null };
+  ['pdf','excel','csv'].forEach(t => {
+    const inp = document.getElementById(`input-${t}`);
+    const box = document.getElementById(`box-${t}`);
+    const lst = document.getElementById(`list-${t}`);
+    if (inp) inp.value = '';
+    if (box) box.classList.remove('has-file');
+    if (lst) lst.innerHTML = '';
+  });
+  document.getElementById('progress-section').style.display = 'none';
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('btn-start').disabled = true;
+}
+
+// ══════════════════════════════════════════════════════════
+//  明暗切換（亮色 → 暗色 → 跟隨系統，不記憶）
+// ══════════════════════════════════════════════════════════
+const THEMES = [
+  { key: 'light',  icon: '☀️',  label: '亮色 (手動切換)' },
+  { key: 'dark',   icon: '🌙',  label: '暗色 (手動切換)' },
+  { key: 'system', icon: '🖥️', label: '跟隨系統明暗模式' },
+];
+let themeIdx = 0;
+
+function applyTheme(key) {
+  document.body.classList.remove('light');
+  if (key === 'light') {
+    document.body.classList.add('light');
+  } else if (key === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches) {
+    document.body.classList.add('light');
+  }
+}
+
+function cycleTheme() {
+  themeIdx = (themeIdx + 1) % THEMES.length;
+  const t = THEMES[themeIdx];
+  document.getElementById('theme-icon').textContent  = t.icon;
+  document.getElementById('theme-label').textContent = t.label;
+  applyTheme(t.key);
+}
+
+// 預設亮色
+applyTheme('light');
+
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+  if (THEMES[themeIdx].key === 'system') applyTheme('system');
+});
+</script>
+</body>
+
+
+<script>
+// ── 新 UI 補充 JS ──
+const modalSteps = { xlsx:0 };
+const pfx = { xlsx:'x' };
+
+document.getElementById('hintXlsx').addEventListener('click', e => { e.stopPropagation(); openModal('xlsx'); });
+document.getElementById('modalXlsx').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalXlsx')) closeModal('xlsx');
+});
+
+function triggerUpload(type) { document.getElementById('input-' + type).click(); }
+
+// 拖曳支援
+['pdf','excel','csv'].forEach(type => {
+  const card = document.getElementById('box-' + type);
+  if (!card) return;
+  card.addEventListener('dragover', e => { e.preventDefault(); card.style.opacity='.7'; });
+  card.addEventListener('dragleave', () => card.style.opacity='1');
+  card.addEventListener('drop', e => {
+    e.preventDefault(); card.style.opacity='1';
+    const newFiles = Array.from(e.dataTransfer.files);
+    if (!newFiles.length) return;
+    if (!files[type]) files[type] = [];
+    files[type] = [...files[type], ...newFiles];
+    renderFileList(type);
+  });
+});
+
+function updateGiftBadge() {
+  const on = document.getElementById('giftToggle').checked;
+  printGift = on;
+  const b = document.getElementById('giftBadge');
+  b.textContent = on ? '開啟，印贈品' : '關閉，不印贈品';
+  b.style.background = on ? '#dcfce7' : '#fee2e2';
+  b.style.color = on ? '#15803d' : 'var(--sf-red)';
+}
+
+function openModal(type) {
+  modalSteps[type]=0; updateModalUI(type);
+  document.getElementById('modal'+type.charAt(0).toUpperCase()+type.slice(1)).classList.add('show');
+}
+function closeModal(type) {
+  document.getElementById('modal'+type.charAt(0).toUpperCase()+type.slice(1)).classList.remove('show');
+}
+function modalNav(type,dir) {
+  modalSteps[type]=Math.max(0,Math.min(1,modalSteps[type]+dir));
+  updateModalUI(type);
+}
+function updateModalUI(type) {
+  const p=pfx[type], s=modalSteps[type];
+  document.querySelectorAll('[id^="'+p+'step"]').forEach((el,i)=>el.classList.toggle('active',i===s));
+  document.querySelectorAll('[id^="'+p+'seg"]').forEach((el,i)=>el.classList.toggle('active',i<=s));
+  document.getElementById(p+'Indicator').textContent='步驟 '+(s+1)+' / 2';
+  document.getElementById(p+'Prev').style.display=s>0?'':'none';
+  document.getElementById(p+'Next').style.display=s<1?'':'none';
+  document.getElementById(p+'Done').style.display=s===1?'':'none';
+}
+
+// 主題
+if (localStorage.getItem('theme')=='dark') { document.body.classList.add('dark'); document.getElementById('themeBtn').textContent='☀️ 亮色'; }
+function toggleTheme() {
+  const d=document.body.classList.toggle('dark');
+  document.getElementById('themeBtn').textContent=d?'☀️ 亮色':'🌙 暗色';
+  localStorage.setItem('theme',d?'dark':'light');
+}
+
+// checkReady 補強：依 shipper 顯示不同提示
+window.checkReady = function() {
+  const btn = document.getElementById('btn-start');
+  if (shipper === 'sf') {
+    const ready = !!(files.pdf?.length && files.excel?.length && files.csv?.length);
+    btn.disabled = !ready;
+    btn.textContent = ready ? '開始分單' : '請上傳 PDF、Excel 與 CSV';
+  } else {
+    const ready = !!(files.pdf?.length && files.excel?.length);
+    btn.disabled = !ready;
+    btn.textContent = ready ? '開始分單' : '請上傳 PDF 與 Excel';
+  }
+};
+</script>
+</html>

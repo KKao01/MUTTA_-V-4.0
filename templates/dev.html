@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>開發者模式 — 分單系統 V3</title>
+<style>
+:root {
+  --bg: #0d0d0f;
+  --bg2: #141418;
+  --bg3: #1c1c22;
+  --bg4: #242430;
+  --border: #2e2e3a;
+  --border2: #3a3a48;
+  --text: #e8e8f0;
+  --text2: #9090a8;
+  --text3: #5a5a70;
+  --accent: #7c6af7;
+  --accent2: #9d8fff;
+  --accent-dim: rgba(124,106,247,0.15);
+  --green: #4ade80;
+  --green-dim: rgba(74,222,128,0.12);
+  --red: #f87171;
+  --red-dim: rgba(248,113,113,0.12);
+  --yellow: #fbbf24;
+  --yellow-dim: rgba(251,191,36,0.12);
+  --radius: 8px;
+  --radius2: 12px;
+}
+
+body.light {
+  --bg: #f4f4f8;
+  --bg2: #ffffff;
+  --bg3: #eaeaf0;
+  --bg4: #dddde8;
+  --border: #d0d0de;
+  --border2: #b8b8cc;
+  --text: #1a1a2e;
+  --text2: #55556a;
+  --text3: #9090a8;
+  --accent: #7c6af7;
+  --accent2: #6254d4;
+  --accent-dim: rgba(124,106,247,0.10);
+  --green: #16a34a;
+  --green-dim: rgba(22,163,74,0.10);
+  --red: #dc2626;
+  --red-dim: rgba(220,38,38,0.10);
+  --yellow: #d97706;
+  --yellow-dim: rgba(217,119,6,0.10);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── 登入頁 MUTTA 風格 ── */
+#login-screen {
+  position: fixed; inset: 0;
+  background: #f0ede8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
+body.light #login-screen { background: #f0ede8; }
+
+.login-box {
+  background: #f7f4ef;
+  border-radius: 20px;
+  padding: 48px 40px;
+  width: 360px;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.08);
+}
+.login-cross {
+  color: #c9a96e;
+  font-size: 13px;
+  letter-spacing: 4px;
+  margin-bottom: 12px;
+}
+.login-brand {
+  font-size: 26px;
+  letter-spacing: 8px;
+  color: #2c2218;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+.login-dot { color: #c9a96e; margin: 0 4px; }
+.login-sub {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #9a8878;
+  margin-bottom: 36px;
+  font-family: 'Noto Sans TC', sans-serif;
+}
+.login-input {
+  width: 100%;
+  padding: 14px 20px;
+  background: #fff;
+  border: 1.5px solid #e0d9d0;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #2c2218;
+  outline: none;
+  text-align: center;
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+.login-input:focus { border-color: #c9a96e; }
+.login-btn {
+  width: 100%;
+  padding: 14px;
+  background: #2c2218;
+  color: #f0ede8;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  letter-spacing: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: 'Georgia', serif;
+}
+.login-btn:hover { background: #3d3025; }
+.login-err {
+  font-size: 12px;
+  color: #c0392b;
+  margin-top: 12px;
+  font-family: 'Noto Sans TC', sans-serif;
+  letter-spacing: 0;
+  min-height: 18px;
+}
+
+/* ── 側邊欄 ── */
+#sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+}
+#sidebar-logo {
+  padding: 0 20px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sf-badge {
+  background: #1a1a2e;
+  color: #fff;
+  border-radius: 5px;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid #2a2a3e;
+}
+.sf-badge .sf { font-size: 9px; font-weight: 700; letter-spacing: 1px; white-space: nowrap; }
+.sf-badge .express { font-size: 5px; letter-spacing: 1.5px; font-weight: 600; margin-top: 1px; opacity: .85; }
+.sf-badge .speed { font-size: 5px; letter-spacing: 2px; font-weight: 600; margin-top: 1px; color: #9d8fff; }
+.sf-logo-info { min-width: 0; }
+.sf-logo-info .title { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.sf-logo-info .sub { font-size: 9px; color: var(--accent2); font-weight: 600; letter-spacing: 1px; margin-top: 2px; white-space: nowrap; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; cursor: pointer;
+  color: var(--text2); font-size: 13px;
+  border-left: 2px solid transparent;
+  transition: all 0.15s; user-select: none;
+}
+.nav-item:hover { color: var(--text); background: var(--bg3); }
+.nav-item.active { color: var(--accent2); background: var(--accent-dim); border-left-color: var(--accent); }
+.nav-icon { font-size: 15px; width: 18px; text-align: center; }
+
+#sidebar-bottom {
+  margin-top: auto; padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px;
+}
+#theme-btn-dev {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text2); font-size: 11px; cursor: pointer;
+  transition: all 0.15s; user-select: none; width: 100%;
+}
+#theme-btn-dev:hover { background: var(--bg4); color: var(--text); }
+.sidebar-actions { display: flex; gap: 6px; }
+#logout-btn {
+  flex: 1; font-size: 12px; color: var(--text3);
+  background: none; border: none; cursor: pointer;
+  padding: 4px 8px; border-radius: var(--radius); transition: all 0.15s;
+}
+#logout-btn:hover { color: var(--red); background: var(--red-dim); }
+#back-btn {
+  flex: 1; font-size: 12px; color: var(--text3);
+  text-decoration: none; padding: 4px 8px;
+  border-radius: var(--radius); transition: all 0.15s; text-align: center;
+}
+#back-btn:hover { color: var(--text); background: var(--bg4); }
+
+/* ── 主內容 ── */
+#main { flex: 1; overflow-y: auto; padding: 28px 32px; }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.page-title { font-size: 20px; font-weight: 700; }
+.page-sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+.page-actions { display: flex; gap: 8px; }
+
+/* ── 按鈕 ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  border: none; transition: all 0.15s; white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-secondary { background: var(--bg4); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg3); border-color: var(--border2); }
+.btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.btn-danger:hover { background: rgba(248,113,113,0.2); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-xs { padding: 3px 8px; font-size: 11px; }
+
+/* ── 卡片 ── */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius2); padding: 20px; margin-bottom: 16px; }
+
+/* ── 表格 ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 12px; background: var(--bg3); color: var(--text2); font-size: 11px; letter-spacing: 0.5px; font-weight: 600; border-bottom: 1px solid var(--border); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg3); }
+
+/* ── 表單 ── */
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+.form-control {
+  width: 100%; padding: 8px 12px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 13px; outline: none; transition: border-color 0.15s; font-family: inherit;
+}
+.form-control:focus { border-color: var(--accent); }
+select.form-control { cursor: pointer; }
+
+/* ── 順豐寄件方表單兩欄佈局 ── */
+.sf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 18px;
+}
+.sf-grid .form-group { margin-bottom: 14px; }
+
+/* ── Badge ── */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+.badge-new { background: var(--green-dim); color: var(--green); }
+.badge-accent { background: var(--accent-dim); color: var(--accent2); }
+.badge-warn { background: var(--yellow-dim); color: var(--yellow); }
+
+/* ── 箱型 tag 樣式 ── */
+.box-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; background: var(--bg3);
+  border: 1px solid var(--border2); border-radius: 99px;
+  font-size: 12px; color: var(--text2); margin: 3px;
+}
+.box-tag .remove { cursor: pointer; color: var(--text3); font-size: 11px; margin-left: 2px; }
+.box-tag .remove:hover { color: var(--red); }
+.add-box-row { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ── 彈窗 ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); z-index: 1000;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius2); padding: 24px;
+  width: 520px; max-width: 95vw; max-height: 85vh; overflow-y: auto;
+}
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 12px 20px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 500; z-index: 9999;
+  transform: translateY(60px); opacity: 0;
+  transition: all 0.25s; pointer-events: none;
+}
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.ok { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+#toast.err { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+
+/* ── 頁面顯示控制 ── */
+.page { display: none; }
+.page.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     登入頁（MUTTA 風格）
+════════════════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-cross">+ &nbsp; M U T T A &nbsp; +</div>
+    <div class="login-brand">MUTTA<span class="login-dot">·</span>DEV</div>
+    <div class="login-sub">分 單 系 統 _ v 3</div>
+    <input class="login-input" type="password" id="login-pw" placeholder="· · · · · · · ·"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">進 入 系 統</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     主介面
+════════════════════════════════════════════════════════════ -->
+<div id="app" style="display:none;width:100%;height:100vh;display:none;flex-direction:row">
+
+<!-- 側邊欄 -->
+<div id="sidebar">
+  <div id="sidebar-logo">
+    <div class="sf-badge">
+      <span class="sf">MUTTA</span>
+      <span class="express">分單系統</span>
+      <span class="speed">DEV</span>
+    </div>
+    <div class="sf-logo-info">
+      <div class="title">沐塔分單系統</div>
+      <div class="sub">開發者後台 V4</div>
+    </div>
+  </div>
+
+  <div class="nav-item active" onclick="nav('spec')"       id="nav-spec">      <span class="nav-icon">📋</span> 規格對照</div>
+  <div class="nav-item"        onclick="nav('categories')" id="nav-categories"><span class="nav-icon">🏷️</span> 母子分類</div>
+  <div class="nav-item"        onclick="nav('boxtypes')"   id="nav-boxtypes">  <span class="nav-icon">📦</span> 箱型管理</div>
+  <div class="nav-item"        onclick="nav('rules')"      id="nav-rules">     <span class="nav-icon">⚙️</span> 分類規則</div>
+  <div class="nav-item"        onclick="nav('gifts')"      id="nav-gifts">     <span class="nav-icon">🎁</span> 贈品規則</div>
+  <div class="nav-item"        onclick="nav('discount')"   id="nav-discount">  <span class="nav-icon">💸</span> 折扣單設定</div>
+  <div class="nav-item"        onclick="nav('remark')"     id="nav-remark">    <span class="nav-icon">💬</span> 訂單備註設定</div>
+  <div class="nav-item"        onclick="nav('sffixed')"    id="nav-sffixed">   <span class="nav-icon">📮</span> 順豐寄件方</div>
+  <div class="nav-item"        onclick="nav('history')"    id="nav-history">   <span class="nav-icon">🕓</span> 歷史購買</div>
+  <div class="nav-item"        onclick="nav('password')"   id="nav-password">  <span class="nav-icon">🔑</span> 修改密碼</div>
+
+  <div id="sidebar-bottom">
+    <button id="theme-btn-dev" onclick="cycleTheme()">
+      <span id="theme-icon">☀️</span>
+      <span id="theme-label">亮色</span>
+    </button>
+    <div class="sidebar-actions">
+      <button id="logout-btn" onclick="logout()">登出</button>
+      <a id="back-btn" href="/">← 返回</a>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <button class="btn btn-secondary btn-xs" style="flex:1" onclick="exportConfig()">⬇ 匯出</button>
+      <label class="btn btn-secondary btn-xs" style="flex:1;cursor:pointer">
+        ⬆ 匯入<input type="file" accept=".json" style="display:none" onchange="importConfig(this)">
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- 主內容 -->
+<div id="main">
+
+  <!-- ── 規格對照 ── -->
+  <div class="page active" id="page-spec">
+    <div class="page-header">
+      <div>
+        <div class="page-title">規格對照表</div>
+        <div class="page-sub">匯入商品總表 → 設定每筆規格對應的母子分類</div>
+      </div>
+      <div class="page-actions">
+        <label class="btn btn-secondary">
+          📥 匯入總表 Excel
+          <input type="file" accept=".xlsx,.xls" style="display:none" onchange="parseProductExcel(this)">
+        </label>
+        <button class="btn btn-primary" onclick="saveSpecMap()">💾 儲存對照</button>
+      </div>
+    </div>
+    <div class="card" id="spec-summary" style="display:none;padding:12px 20px;margin-bottom:16px"></div>
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:35%">規格字串</th>
+            <th style="width:20%">商品名稱</th>
+            <th style="width:15%">母分類</th>
+            <th style="width:15%">子分類</th>
+            <th style="width:8%">數量</th>
+            <th style="width:7%"></th>
+          </tr></thead>
+          <tbody id="spec-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 母子分類 ── -->
+  <div class="page" id="page-categories">
+    <div class="page-header">
+      <div>
+        <div class="page-title">母子分類</div>
+        <div class="page-sub">定義所有母分類與其子分類</div>
+      </div>
+      <button class="btn btn-primary" onclick="saveCategories()">💾 儲存</button>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:8px">
+        <input class="form-control" id="new-parent-name" placeholder="新增母分類名稱" style="max-width:200px">
+        <button class="btn btn-secondary" onclick="addParent()">+ 新增母分類</button>
+      </div>
+    </div>
+    <div id="categories-list"></div>
+  </div>
+
+  <!-- ── 箱型管理 ── -->
+  <div class="page" id="page-boxtypes">
+    <div class="page-header">
+      <div>
+        <div class="page-title">箱型管理</div>
+        <div class="page-sub">定義所有箱型，順序即 PDF 排序依據</div>
+      </div>
+      <button class="btn btn-primary" onclick="saveBoxTypes()">💾 儲存</button>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">拖曳可調整順序（排序越前面的箱型，PDF 檔案排越前面）</div>
+      <div id="boxtypes-list" style="display:flex;flex-wrap:wrap;min-height:40px"></div>
+      <div class="add-box-row">
+        <input class="form-control" id="new-box-name" placeholder="新增箱型名稱" style="max-width:200px">
+        <button class="btn btn-secondary" onclick="addBoxType()">+ 新增</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 分類規則 ── -->
+  <div class="page" id="page-rules">
+    <div class="page-header">
+      <div>
+        <div class="page-title">分類規則</div>
+        <div class="page-sub">整張訂單必須完全符合所有條件才命中</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-secondary" onclick="showAddRuleModal()">+ 新增規則</button>
+        <button class="btn btn-primary" onclick="saveRules()">💾 儲存</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:25%">分類名稱</th>
+            <th>條件</th>
+            <th style="width:100px"></th>
+          </tr></thead>
+          <tbody id="rules-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 贈品規則 ── -->
+  <div class="page" id="page-gifts">
+    <div class="page-header">
+      <div>
+        <div class="page-title">贈品規則</div>
+        <div class="page-sub">設定每個分類對應的女性/男性贈品內容與箱型</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-secondary" onclick="showAddGiftModal()">+ 新增贈品規則</button>
+        <button class="btn btn-primary" onclick="saveGifts()">💾 儲存</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:18%">分類名稱</th>
+            <th style="width:12%">箱型</th>
+            <th style="width:30%">女性贈品</th>
+            <th style="width:30%">男性贈品</th>
+            <th style="width:10%"></th>
+          </tr></thead>
+          <tbody id="gifts-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 折扣單 ── -->
+  <div class="page" id="page-discount">
+    <div class="page-header">
+      <div class="page-title">折扣單設定</div>
+    </div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">折扣單抽出門檻（購物金使用 &gt; 此值才算高折扣）</label>
+        <input class="form-control" id="discount-threshold" type="number" min="0" placeholder="例：157">
+      </div>
+      <div class="form-group">
+        <label class="form-label">折扣單抽出最少張數（同分類達此張數才抽到「折扣單」）</label>
+        <input class="form-control" id="discount-min-count" type="number" min="1" placeholder="例：3">
+      </div>
+      <div class="form-group">
+        <label class="form-label">豁免金額（購物金使用恰好等於這些值時不算高折扣，逗號分隔）</label>
+        <input class="form-control" id="discount-values" placeholder="例：50,120,170">
+      </div>
+      <div class="form-group">
+        <label class="form-label">均價門檻（訂單均價 &lt; 此值會排到分類後段）</label>
+        <input class="form-control" id="avg-price-threshold" type="number" min="0" placeholder="例：450">
+      </div>
+      <button class="btn btn-primary" onclick="saveDiscount()">💾 儲存</button>
+    </div>
+  </div>
+
+  <!-- ── 備註設定 ── -->
+  <div class="page" id="page-remark">
+    <div class="page-header">
+      <div class="page-title">訂單備註設定</div>
+    </div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">排除詞（符合這些的備註視為無備註,逗號分隔）</label>
+        <input class="form-control" id="remark-values" placeholder="例：無,沒有,NO,no,無備註">
+      </div>
+      <button class="btn btn-primary" onclick="saveRemark()">💾 儲存</button>
+    </div>
+  </div>
+
+  <!-- ── 順豐寄件方 ── -->
+  <div class="page" id="page-sffixed">
+    <div class="page-header">
+      <div class="page-title">順豐寄件方</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">
+        產出「順豐批量下單 Excel」時使用的固定欄位。修改後會立即套用到下次分單。
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent2)">📤 寄件方資訊</div>
+      <div class="sf-grid">
+        <div class="form-group"><label class="form-label">姓名</label>
+          <input class="form-control" id="sf-sender_name" placeholder="例：沐塔"></div>
+        <div class="form-group"><label class="form-label">電話</label>
+          <input class="form-control" id="sf-sender_phone" placeholder="例：931753889"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">詳細地址</label>
+          <input class="form-control" id="sf-sender_address" placeholder="例：新北市林口區四維路329-1號"></div>
+        <div class="form-group"><label class="form-label">縣 / 區</label>
+          <input class="form-control" id="sf-sender_district" placeholder="例：林口區"></div>
+        <div class="form-group"><label class="form-label">城市</label>
+          <input class="form-control" id="sf-sender_city" placeholder="例：新北市"></div>
+        <div class="form-group"><label class="form-label">州 / 省</label>
+          <input class="form-control" id="sf-sender_province" placeholder="例：新北市"></div>
+        <div class="form-group"><label class="form-label">國家 / 地區</label>
+          <input class="form-control" id="sf-sender_country" placeholder="例：中國臺灣"></div>
+        <div class="form-group"><label class="form-label">郵編</label>
+          <input class="form-control" id="sf-sender_postcode" placeholder="例：244"></div>
+        <div class="form-group"><label class="form-label">寄件類型</label>
+          <input class="form-control" id="sf-sender_type" placeholder="例：公司件"></div>
+        <div class="form-group"><label class="form-label">公司</label>
+          <input class="form-control" id="sf-sender_company" placeholder="例：植沐"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent2)">📥 收件方固定欄位</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:10px">
+        所有訂單共用的收件方固定欄位（詳細地址會用 CSV 內每筆訂單的地址覆蓋）
+      </div>
+      <div class="sf-grid">
+        <div class="form-group"><label class="form-label">國家 / 地區</label>
+          <input class="form-control" id="sf-receiver_country" placeholder="例：中國臺灣"></div>
+        <div class="form-group"><label class="form-label">州 / 省</label>
+          <input class="form-control" id="sf-receiver_province" placeholder="例：台灣"></div>
+        <div class="form-group"><label class="form-label">城市</label>
+          <input class="form-control" id="sf-receiver_city" placeholder="例：台灣"></div>
+        <div class="form-group"><label class="form-label">郵編</label>
+          <input class="form-control" id="sf-receiver_postcode" placeholder="例：000"></div>
+        <div class="form-group"><label class="form-label">收件類型</label>
+          <input class="form-control" id="sf-receiver_type" placeholder="例：個人件"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent2)">📦 商品 / 物流</div>
+      <div class="sf-grid">
+        <div class="form-group"><label class="form-label">商品名稱</label>
+          <input class="form-control" id="sf-product_name" placeholder="例：保養品"></div>
+        <div class="form-group"><label class="form-label">商品數量</label>
+          <input class="form-control" id="sf-product_qty" placeholder="例：1"></div>
+        <div class="form-group"><label class="form-label">單位</label>
+          <input class="form-control" id="sf-product_unit" placeholder="例：box"></div>
+        <div class="form-group"><label class="form-label">商品單價</label>
+          <input class="form-control" id="sf-product_price" placeholder="例：8000"></div>
+        <div class="form-group"><label class="form-label">包裹總件數</label>
+          <input class="form-control" id="sf-parcel_count" placeholder="例：1"></div>
+        <div class="form-group"><label class="form-label">商品貨幣</label>
+          <input class="form-control" id="sf-currency" placeholder="例：NTD"></div>
+        <div class="form-group"><label class="form-label">快件類型</label>
+          <input class="form-control" id="sf-express_type" placeholder="例：順豐特快"></div>
+        <div class="form-group"><label class="form-label">寄件方式</label>
+          <input class="form-control" id="sf-send_method" placeholder="例：自行聯系快遞員或自寄"></div>
+        <div class="form-group"><label class="form-label">付款方式</label>
+          <input class="form-control" id="sf-payment_method" placeholder="（選填）"></div>
+        <div class="form-group"><label class="form-label">月結卡號</label>
+          <input class="form-control" id="sf-monthly_card_no" placeholder="（選填）"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveSfFixed()">💾 儲存所有設定</button>
+  </div>
+
+  <!-- ── 歷史購買 ── -->
+  <div class="page" id="page-history">
+    <div class="page-header">
+      <div class="page-title">歷史購買</div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:14px">已記錄帳號：<b id="history-count">0</b> 筆</div>
+        <div style="display:flex;gap:8px">
+          <label class="btn btn-secondary btn-sm">
+            ⬆ 上傳歷史 Excel
+            <input type="file" accept=".xlsx,.xls" style="display:none" onchange="uploadHistory(this)">
+          </label>
+          <button class="btn btn-danger btn-sm" onclick="resetHistory()">🗑 清除全部</button>
+        </div>
+      </div>
+      <div id="history-log" style="max-height:200px;overflow-y:auto"></div>
+    </div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">備忘錄</label>
+        <textarea class="form-control" id="history-note" rows="5" placeholder="自由記錄..."></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="saveNote()">💾 儲存備忘錄</button>
+    </div>
+  </div>
+
+  <!-- ── 修改密碼 ── -->
+  <div class="page" id="page-password">
+    <div class="page-header"><div class="page-title">修改密碼</div></div>
+    <div class="card" style="max-width:400px">
+      <div class="form-group">
+        <label class="form-label">目前密碼</label>
+        <input class="form-control" type="password" id="pw-cur">
+      </div>
+      <div class="form-group">
+        <label class="form-label">新密碼</label>
+        <input class="form-control" type="password" id="pw-new">
+      </div>
+      <div class="form-group">
+        <label class="form-label">確認新密碼</label>
+        <input class="form-control" type="password" id="pw-confirm">
+      </div>
+      <button class="btn btn-primary" onclick="changePassword()">更新密碼</button>
+    </div>
+  </div>
+
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ══════════════════════════════════════════════════════════
+     彈窗：新增分類規則
+════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-add-rule">
+  <div class="modal">
+    <div class="modal-title" id="modal-rule-title">新增分類規則</div>
+    <div class="form-group">
+      <label class="form-label">分類名稱</label>
+      <input class="form-control" id="new-rule-name" placeholder="例：粉+橘（一大一小高）">
+    </div>
+    <div class="form-label" style="margin-bottom:8px">條件（整張訂單必須完全符合所有條件）</div>
+    <div id="new-rule-conditions"></div>
+    <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="addRuleCondition()">+ 新增條件行</button>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-add-rule')">取消</button>
+      <button class="btn btn-primary" onclick="confirmAddRule()">新增規則</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     彈窗：新增贈品規則
+════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-add-gift">
+  <div class="modal">
+    <div class="modal-title">新增贈品規則</div>
+    <div class="form-group">
+      <label class="form-label">分類名稱</label>
+      <input class="form-control" id="new-gift-cat" placeholder="例：粉+橘（一大一小高）">
+    </div>
+    <div class="form-group">
+      <label class="form-label">箱型</label>
+      <select class="form-control" id="new-gift-box"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">女性贈品</label>
+      <input class="form-control" id="new-gift-female" placeholder="《...》">
+    </div>
+    <div class="form-group">
+      <label class="form-label">男性贈品（留空同女性）</label>
+      <input class="form-control" id="new-gift-male" placeholder="留空同女性">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-add-gift')">取消</button>
+      <button class="btn btn-primary" onclick="confirmAddGift()">新增</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  狀態
+// ══════════════════════════════════════════════════════════
+let TOKEN = '';
+let categories = {}, specRows = [], rules = {}, gifts = {}, boxTypes = [];
+
+// ══════════════════════════════════════════════════════════
+//  明暗切換
+// ══════════════════════════════════════════════════════════
+const THEMES = [
+  { key: 'light', icon: '☀️', label: '亮色' },
+  { key: 'dark',  icon: '🌙', label: '暗色' },
+  { key: 'system',icon: '🖥️',label: '系統' },
+];
+let themeIdx = 0;
+
+function applyTheme(key) {
+  document.body.classList.remove('light');
+  if (key === 'light') document.body.classList.add('light');
+  else if (key === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)
+    document.body.classList.add('light');
+}
+function cycleTheme() {
+  themeIdx = (themeIdx + 1) % THEMES.length;
+  const t = THEMES[themeIdx];
+  document.getElementById('theme-icon').textContent = t.icon;
+  document.getElementById('theme-label').textContent = t.label;
+  applyTheme(t.key);
+}
+applyTheme('light');
+
+// ══════════════════════════════════════════════════════════
+//  登入
+// ══════════════════════════════════════════════════════════
+async function doLogin() {
+  const pw = document.getElementById('login-pw').value;
+  if (!pw) return;
+  try {
+    const res = await fetch('/api/dev/login', {
+      method: 'POST',
+      body: new URLSearchParams({ password: pw })
+    });
+    if (!res.ok) { document.getElementById('login-err').textContent = '密碼錯誤'; return; }
+    TOKEN = pw;
+    document.getElementById('login-screen').style.display = 'none';
+    const app = document.getElementById('app');
+    app.style.display = 'flex';
+    await loadAll();
+  } catch(e) {
+    document.getElementById('login-err').textContent = '連線失敗';
+  }
+}
+
+function logout() {
+  TOKEN = '';
+  document.getElementById('login-pw').value = '';
+  document.getElementById('login-err').textContent = '';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════
+//  API
+// ══════════════════════════════════════════════════════════
+async function api(method, url, body, isForm=false) {
+  const opts = { method, headers: { 'X-Dev-Token': TOKEN } };
+  if (body) {
+    if (isForm) { opts.body = body; }
+    else { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  }
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+  return res.json();
+}
+
+// ══════════════════════════════════════════════════════════
+//  Toast
+// ══════════════════════════════════════════════════════════
+let toastTimer;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 2800);
+}
+
+// ══════════════════════════════════════════════════════════
+//  導航
+// ══════════════════════════════════════════════════════════
+function nav(page) {
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.getElementById(`nav-${page}`).classList.add('active');
+  document.getElementById(`page-${page}`).classList.add('active');
+  if (page === 'history') loadHistory();
+  if (page === 'sffixed') loadSfFixed();
+}
+
+// ══════════════════════════════════════════════════════════
+//  彈窗
+// ══════════════════════════════════════════════════════════
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); });
+});
+
+// ══════════════════════════════════════════════════════════
+//  載入所有設定
+// ══════════════════════════════════════════════════════════
+async function loadAll() {
+  const [cfg, sm, r, g, bt] = await Promise.all([
+    api('GET', '/api/dev/config'),
+    api('GET', '/api/dev/spec-map'),
+    api('GET', '/api/dev/classification-rules'),
+    api('GET', '/api/dev/gift-rules'),
+    api('GET', '/api/dev/box-types'),
+  ]);
+  categories = cfg.categories || {};
+  rules = r || {};
+  gifts = g || {};
+  boxTypes = bt || [];
+
+  document.getElementById('discount-values').value = (cfg.discount_excludes || []).join(', ');
+  document.getElementById('discount-threshold').value = cfg.discount_threshold ?? 157;
+  document.getElementById('discount-min-count').value = cfg.discount_min_count ?? 3;
+  document.getElementById('avg-price-threshold').value = cfg.avg_price_threshold ?? 450;
+  document.getElementById('remark-values').value = (cfg.remark_excludes || []).join(', ');
+
+  // 從 spec_map 自動還原 specRows（支援多條件）
+  specRows = Object.entries(sm || {}).map(([spec, info]) => {
+    let conditions;
+    if (Array.isArray(info)) {
+      conditions = info.map(c => ({ parent: c.parent||'', child: c.child||'', qty: c.qty||1 }));
+    } else {
+      conditions = [{ parent: info?.parent||'', child: info?.child||'', qty: info?.qty||1 }];
+    }
+    return { spec, product_name: '', is_new: false, conditions };
+  });
+  if (specRows.length) {
+    const sum = document.getElementById('spec-summary');
+    sum.style.display = 'block';
+    sum.innerHTML = `已設定 <b>${specRows.length}</b> 筆規格對照（商品名稱需匯入總表 Excel 才會顯示）`;
+    renderSpecList();
+  }
+
+  renderCategories();
+  renderBoxTypes();
+  renderRules();
+  renderGifts();
+}
+
+// ══════════════════════════════════════════════════════════
+//  規格對照（支援多條件）
+//  specRows: [{spec, product_name, is_new, conditions:[{parent,child,qty}]}]
+// ══════════════════════════════════════════════════════════
+function parentOptions(selected='') {
+  return `<option value="">-- 母分類 --</option>` +
+    Object.keys(categories).map(p =>
+      `<option value="${p}" ${p===selected?'selected':''}>${p}</option>`
+    ).join('');
+}
+function childOptions(parent, selected='') {
+  return `<option value="">-- 子分類 --</option>` +
+    (categories[parent]||[]).map(c =>
+      `<option value="${c}" ${c===selected?'selected':''}>${c}</option>`
+    ).join('');
+}
+
+function condRowHtml(ri, ci, cond={}) {
+  return `
+    <div class="spec-cond-row" id="scr-${ri}-${ci}" style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+      <select class="form-control" id="sp-parent-${ri}-${ci}" onchange="onSpParentChange(${ri},${ci})" style="flex:2;font-size:12px">
+        ${parentOptions(cond.parent||'')}
+      </select>
+      <select class="form-control" id="sp-child-${ri}-${ci}" style="flex:2;font-size:12px">
+        ${childOptions(cond.parent||'', cond.child||'')}
+      </select>
+      <input type="number" class="form-control" id="sp-qty-${ri}-${ci}"
+        value="${cond.qty||1}" min="1" style="width:55px;font-size:12px">
+      <button onclick="removeCondRow(${ri},${ci})"
+        style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0 3px"
+        title="刪除此條件">✕</button>
+    </div>`;
+}
+
+function renderSpecList() {
+  const tbody = document.getElementById('spec-list');
+  tbody.innerHTML = specRows.map((row, ri) => {
+    const conds = row.conditions || [{parent:'',child:'',qty:1}];
+    const condHtml = conds.map((c, ci) => condRowHtml(ri, ci, c)).join('');
+    return `
+      <tr id="spec-row-${ri}">
+        <td style="font-family:monospace;font-size:12px;vertical-align:top;padding-top:10px">
+          ${row.spec} ${row.is_new ? '<span class="badge badge-new">新</span>' : ''}
+        </td>
+        <td style="font-size:11px;color:var(--text2);vertical-align:top;padding-top:10px">${row.product_name||''}</td>
+        <td colspan="3">
+          <div id="sp-conds-${ri}">${condHtml}</div>
+          <button class="btn btn-secondary btn-xs" style="margin-top:2px" onclick="addCondRow(${ri})">+ 新增條件</button>
+        </td>
+        <td style="vertical-align:top;padding-top:8px"></td>
+      </tr>`;
+  }).join('');
+}
+
+function onSpParentChange(ri, ci) {
+  const parent = document.getElementById(`sp-parent-${ri}-${ci}`).value;
+  const sel = document.getElementById(`sp-child-${ri}-${ci}`);
+  sel.innerHTML = childOptions(parent);
+}
+
+function addCondRow(ri) {
+  const container = document.getElementById(`sp-conds-${ri}`);
+  const ci = container.querySelectorAll('.spec-cond-row').length;
+  container.insertAdjacentHTML('beforeend', condRowHtml(ri, ci));
+}
+
+function removeCondRow(ri, ci) {
+  const container = document.getElementById(`sp-conds-${ri}`);
+  const rows = container.querySelectorAll('.spec-cond-row');
+  if (rows.length <= 1) { toast('至少需要一個條件', 'err'); return; }
+  document.getElementById(`scr-${ri}-${ci}`)?.remove();
+}
+
+function readSpecConditions(ri) {
+  const container = document.getElementById(`sp-conds-${ri}`);
+  if (!container) return [];
+  const result = [];
+  container.querySelectorAll('.spec-cond-row').forEach(row => {
+    const id = row.id.replace('scr-', '');
+    const [r, c] = id.split('-');
+    const parent = document.getElementById(`sp-parent-${r}-${c}`)?.value || '';
+    const child  = document.getElementById(`sp-child-${r}-${c}`)?.value || '';
+    const qty    = parseInt(document.getElementById(`sp-qty-${r}-${c}`)?.value || '1');
+    if (parent) result.push({ parent, child, qty });
+  });
+  return result;
+}
+
+async function parseProductExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    toast('解析中...', 'ok');
+    const data = await api('POST', '/api/dev/parse-product-excel', fd, true);
+    // 從 API 回傳建立 specRows（含多條件）
+    const sm = await api('GET', '/api/dev/spec-map');
+    specRows = (data.rows || []).map(row => {
+      const raw = sm[row.spec];
+      let conditions;
+      if (Array.isArray(raw)) {
+        conditions = raw.map(c => ({ parent: c.parent||'', child: c.child||'', qty: c.qty||1 }));
+      } else if (raw) {
+        conditions = [{ parent: raw.parent||'', child: raw.child||'', qty: raw.qty||1 }];
+      } else {
+        conditions = [{ parent: '', child: '', qty: 1 }];
+      }
+      return { spec: row.spec, product_name: row.product_name||'', is_new: row.is_new, conditions };
+    });
+    renderSpecList();
+    const sum = document.getElementById('spec-summary');
+    const newCount = specRows.filter(r => r.is_new).length;
+    sum.style.display = 'block';
+    sum.innerHTML = `共 <b>${data.total}</b> 筆規格，其中 <span style="color:var(--green)">${data.total - newCount} 筆已設定</span>，<span style="color:var(--yellow)">${newCount} 筆尚未設定</span>`;
+    toast('解析完成', 'ok');
+  } catch(e) { toast('解析失敗：' + e.message, 'err'); }
+  input.value = '';
+}
+
+async function saveSpecMap() {
+  const newMap = {};
+  specRows.forEach((row, ri) => {
+    const conds = readSpecConditions(ri);
+    if (!conds.length) return;
+    // 單條存 dict，多條存 list
+    newMap[row.spec] = conds.length === 1 ? conds[0] : conds;
+  });
+  try {
+    await api('POST', '/api/dev/spec-map', newMap);
+    toast('規格對照儲存完成', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  母子分類
+// ══════════════════════════════════════════════════════════
+function renderCategories() {
+  const el = document.getElementById('categories-list');
+  el.innerHTML = Object.keys(categories).map(parent => `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <b style="font-size:15px">${parent}</b>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="form-control" id="new-child-${parent}" placeholder="新增子分類" style="max-width:150px;font-size:12px"
+            onkeydown="if(event.key==='Enter')addChild('${parent}')">
+          <button class="btn btn-secondary btn-sm" onclick="addChild('${parent}')">+ 子分類</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteParent('${parent}')">刪除</button>
+        </div>
+      </div>
+      <div id="children-${parent}" style="display:flex;flex-wrap:wrap;gap:6px">
+        ${(categories[parent]||[]).map(c => `
+          <span class="box-tag">${c}<span class="remove" onclick="deleteChild('${parent}','${c}')">✕</span></span>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function addParent() {
+  const name = document.getElementById('new-parent-name').value.trim();
+  if (!name) return;
+  if (categories[name]) { toast('母分類已存在', 'err'); return; }
+  categories[name] = [];
+  document.getElementById('new-parent-name').value = '';
+  renderCategories();
+}
+function deleteParent(p) {
+  if (!confirm(`確定刪除母分類「${p}」及其所有子分類？`)) return;
+  delete categories[p];
+  renderCategories();
+}
+function addChild(parent) {
+  const name = document.getElementById(`new-child-${parent}`).value.trim();
+  if (!name) return;
+  if (!categories[parent].includes(name)) categories[parent].push(name);
+  renderCategories();
+}
+function deleteChild(parent, child) {
+  categories[parent] = categories[parent].filter(c => c !== child);
+  renderCategories();
+}
+async function saveCategories() {
+  try {
+    await api('POST', '/api/dev/categories', categories);
+    toast('母子分類儲存完成', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  箱型管理
+// ══════════════════════════════════════════════════════════
+function renderBoxTypes() {
+  const el = document.getElementById('boxtypes-list');
+  el.innerHTML = boxTypes.map((b, i) => `
+    <span class="box-tag" draggable="true"
+      ondragstart="dragBox(event,${i})" ondragover="dragOverBox(event,${i})" ondrop="dropBox(event,${i})">
+      ⠿ ${b}<span class="remove" onclick="deleteBoxType(${i})">✕</span>
+    </span>
+  `).join('');
+  // 同步更新贈品規則新增彈窗的箱型選單
+  const sel = document.getElementById('new-gift-box');
+  if (sel) {
+    sel.innerHTML = `<option value="">-- 不指定 --</option>` +
+      boxTypes.map(b => `<option value="${b}">${b}</option>`).join('');
+  }
+}
+
+function addBoxType() {
+  const name = document.getElementById('new-box-name').value.trim();
+  if (!name) return;
+  if (boxTypes.includes(name)) { toast('箱型已存在', 'err'); return; }
+  boxTypes.push(name);
+  document.getElementById('new-box-name').value = '';
+  renderBoxTypes();
+  renderGifts();
+}
+function deleteBoxType(i) {
+  boxTypes.splice(i, 1);
+  renderBoxTypes();
+  renderGifts();
+}
+async function saveBoxTypes() {
+  try {
+    await api('POST', '/api/dev/box-types', boxTypes);
+    toast('箱型儲存完成', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// 拖曳排序
+let dragIdx = null;
+function dragBox(e, i) { dragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+function dragOverBox(e, i) { e.preventDefault(); }
+function dropBox(e, i) {
+  e.preventDefault();
+  if (dragIdx === null || dragIdx === i) return;
+  const moved = boxTypes.splice(dragIdx, 1)[0];
+  boxTypes.splice(i, 0, moved);
+  dragIdx = null;
+  renderBoxTypes();
+}
+
+// ══════════════════════════════════════════════════════════
+//  分類規則
+// ══════════════════════════════════════════════════════════
+function renderRules() {
+  const tbody = document.getElementById('rules-list');
+  tbody.innerHTML = Object.keys(rules).map(cat => {
+    const conds = rules[cat].map(c =>
+      `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;background:var(--bg3);border-radius:4px;font-size:11px">
+        ${c.parent}${c.child ? ' › ' + c.child : '（任意子）'} × ${c.qty}
+      </span>`
+    ).join('');
+    return `<tr>
+      <td><b>${cat}</b></td>
+      <td>${conds}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-secondary btn-xs" onclick="editRule('${cat}')">編輯</button>
+          <button class="btn btn-danger btn-xs" onclick="deleteRule('${cat}')">刪除</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+let _editingRule = null;
+let _condIdx = 0;
+
+function showAddRuleModal(editCat = null) {
+  _editingRule = editCat;
+  _condIdx = 0;
+  const container = document.getElementById('new-rule-conditions');
+  container.innerHTML = '';
+  document.getElementById('new-rule-name').value = editCat || '';
+  document.getElementById('modal-rule-title').textContent = editCat ? '編輯分類規則' : '新增分類規則';
+
+  if (editCat && rules[editCat]) {
+    rules[editCat].forEach(cond => addRuleCondition(cond));
+  } else {
+    addRuleCondition();
+  }
+  showModal('modal-add-rule');
+}
+
+function editRule(cat) { showAddRuleModal(cat); }
+
+function addRuleCondition(prefill = null) {
+  const idx = _condIdx++;
+  const container = document.getElementById('new-rule-conditions');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+  row.innerHTML = `
+    <select class="form-control" id="rc-parent-${idx}" onchange="onRcParentChange(${idx})" style="flex:2">
+      <option value="">-- 母分類 --</option>
+      ${Object.keys(categories).map(p => `<option value="${p}" ${prefill?.parent===p?'selected':''}>${p}</option>`).join('')}
+    </select>
+    <select class="form-control" id="rc-child-${idx}" style="flex:2">
+      <option value="">-- 子分類（可空）--</option>
+      ${prefill?.parent ? (categories[prefill.parent]||[]).map(c => `<option value="${c}" ${prefill.child===c?'selected':''}>${c}</option>`).join('') : ''}
+    </select>
+    <input type="number" class="form-control" id="rc-qty-${idx}" value="${prefill?.qty||1}" min="1" style="width:70px">
+    <button class="btn btn-danger btn-xs" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function onRcParentChange(idx) {
+  const parent = document.getElementById(`rc-parent-${idx}`).value;
+  const sel = document.getElementById(`rc-child-${idx}`);
+  sel.innerHTML = `<option value="">-- 子分類（可空）--</option>` +
+    (categories[parent]||[]).map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function confirmAddRule() {
+  const cat = document.getElementById('new-rule-name').value.trim();
+  if (!cat) { toast('請輸入分類名稱', 'err'); return; }
+  const container = document.getElementById('new-rule-conditions');
+  const conditions = [];
+  for (const row of container.children) {
+    const pidEl = row.querySelector('[id^=rc-parent]');
+    if (!pidEl) continue;
+    const idx = pidEl.id.replace('rc-parent-', '');
+    const parent = document.getElementById(`rc-parent-${idx}`).value;
+    const child  = document.getElementById(`rc-child-${idx}`).value;
+    const qty    = parseInt(document.getElementById(`rc-qty-${idx}`).value || '1');
+    if (!parent) { toast('請為每個條件選擇母分類', 'err'); return; }
+    conditions.push({ parent, child, qty });
+  }
+  if (!conditions.length) { toast('請至少新增一個條件', 'err'); return; }
+  if (_editingRule && _editingRule !== cat) delete rules[_editingRule];
+  rules[cat] = conditions;
+  renderRules();
+  closeModal('modal-add-rule');
+  _editingRule = null;
+}
+
+function deleteRule(cat) {
+  if (!confirm(`確定刪除分類規則「${cat}」？`)) return;
+  delete rules[cat];
+  renderRules();
+}
+
+async function saveRules() {
+  try {
+    await api('POST', '/api/dev/classification-rules', rules);
+    toast('分類規則儲存完成', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  贈品規則
+// ══════════════════════════════════════════════════════════
+function renderGifts() {
+  const tbody = document.getElementById('gifts-list');
+  tbody.innerHTML = Object.keys(gifts).map(cat => {
+    const key = encodeURIComponent(cat);
+    const boxSel = boxTypes.map(b =>
+      `<option value="${b}" ${gifts[cat]?.box===b?'selected':''}>${b}</option>`
+    ).join('');
+    return `<tr>
+      <td>
+        <input type="text" class="form-control" id="gf-cat-${key}"
+          value="${cat}" style="min-width:120px;font-size:12px">
+      </td>
+      <td>
+        <select class="form-control" id="gf-box-${key}" style="font-size:12px;min-width:90px">
+          <option value="">-- 不指定 --</option>
+          ${boxSel}
+        </select>
+      </td>
+      <td>
+        <input type="text" class="form-control" id="gf-f-${key}"
+          value="${gifts[cat]?.female || ''}" style="min-width:180px;font-size:12px">
+      </td>
+      <td>
+        <input type="text" class="form-control" id="gf-m-${key}"
+          value="${gifts[cat]?.male || ''}" placeholder="留空同女性" style="min-width:180px;font-size:12px">
+      </td>
+      <td>
+        <button class="btn btn-danger btn-xs" onclick="deleteGift('${cat}')">刪除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function showAddGiftModal() {
+  document.getElementById('new-gift-cat').value = '';
+  document.getElementById('new-gift-female').value = '';
+  document.getElementById('new-gift-male').value = '';
+  const sel = document.getElementById('new-gift-box');
+  sel.innerHTML = `<option value="">-- 不指定 --</option>` +
+    boxTypes.map(b => `<option value="${b}">${b}</option>`).join('');
+  showModal('modal-add-gift');
+}
+
+function confirmAddGift() {
+  const cat    = document.getElementById('new-gift-cat').value.trim();
+  const box    = document.getElementById('new-gift-box').value;
+  const female = document.getElementById('new-gift-female').value.trim();
+  const male   = document.getElementById('new-gift-male').value.trim();
+  if (!cat) { toast('請輸入分類名稱', 'err'); return; }
+  if (!female) { toast('請輸入女性贈品', 'err'); return; }
+  gifts[cat] = { box, female, male: male || female };
+  renderGifts();
+  closeModal('modal-add-gift');
+}
+
+function deleteGift(cat) {
+  if (!confirm(`確定刪除「${cat}」的贈品規則？`)) return;
+  delete gifts[cat];
+  renderGifts();
+}
+
+async function saveGifts() {
+  // 從頁面讀取最新值（含分類名稱編輯）
+  const newGifts = {};
+  Object.keys(gifts).forEach(cat => {
+    const key = encodeURIComponent(cat);
+    const catEl = document.getElementById(`gf-cat-${key}`);
+    const boxEl = document.getElementById(`gf-box-${key}`);
+    const fEl   = document.getElementById(`gf-f-${key}`);
+    const mEl   = document.getElementById(`gf-m-${key}`);
+    if (!catEl) return;
+    const newCat = catEl.value.trim() || cat;
+    const box    = boxEl ? boxEl.value : '';
+    const female = fEl ? fEl.value.trim() : '';
+    const male   = mEl ? mEl.value.trim() : '';
+    newGifts[newCat] = { box, female, male: male || female };
+  });
+  gifts = newGifts;
+  try {
+    await api('POST', '/api/dev/gift-rules', gifts);
+    toast('贈品規則儲存完成', 'ok');
+    renderGifts();
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  折扣 / 備註
+// ══════════════════════════════════════════════════════════
+async function saveDiscount() {
+  const values = document.getElementById('discount-values').value
+    .split(',').map(v => parseInt(v.trim())).filter(v => !isNaN(v));
+  const threshold = parseInt(document.getElementById('discount-threshold').value);
+  const minCount  = parseInt(document.getElementById('discount-min-count').value);
+  const avgThr    = parseInt(document.getElementById('avg-price-threshold').value);
+  if (isNaN(threshold) || threshold < 0) { toast('請輸入有效的折扣門檻', 'err'); return; }
+  if (isNaN(minCount)  || minCount  < 1) { toast('請輸入有效的最少張數（至少 1）', 'err'); return; }
+  if (isNaN(avgThr)    || avgThr    < 0) { toast('請輸入有效的均價門檻', 'err'); return; }
+  try {
+    await api('POST', '/api/dev/discount-excludes', { values });
+    await api('POST', '/api/dev/discount-config', {
+      discount_threshold:  threshold,
+      discount_min_count:  minCount,
+      avg_price_threshold: avgThr,
+    });
+    toast('折扣設定已儲存', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+async function saveRemark() {
+  const values = document.getElementById('remark-values').value
+    .split(',').map(v => v.trim()).filter(v => v);
+  try {
+    await api('POST', '/api/dev/remark-excludes', { values });
+    toast('備註設定已儲存', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  順豐寄件方
+// ══════════════════════════════════════════════════════════
+const SF_FIXED_KEYS = [
+  'sender_name','sender_phone','sender_address','sender_district',
+  'sender_city','sender_province','sender_country','sender_postcode',
+  'sender_type','sender_company',
+  'receiver_country','receiver_province','receiver_city','receiver_postcode','receiver_type',
+  'product_name','product_qty','product_unit','product_price',
+  'parcel_count','currency','express_type','send_method',
+  'payment_method','monthly_card_no',
+];
+
+async function loadSfFixed() {
+  try {
+    const data = await api('GET', '/api/dev/sf-fixed');
+    SF_FIXED_KEYS.forEach(k => {
+      const el = document.getElementById('sf-' + k);
+      if (el) el.value = (data && data[k] != null) ? data[k] : '';
+    });
+  } catch(e) { toast('載入順豐設定失敗：' + e.message, 'err'); }
+}
+
+async function saveSfFixed() {
+  const body = {};
+  SF_FIXED_KEYS.forEach(k => {
+    const el = document.getElementById('sf-' + k);
+    body[k] = el ? el.value.trim() : '';
+  });
+  try {
+    await api('POST', '/api/dev/sf-fixed', body);
+    toast('順豐寄件方設定已儲存', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  歷史購買
+// ══════════════════════════════════════════════════════════
+async function loadHistory() {
+  try {
+    const data = await api('GET', '/api/dev/history/files');
+    document.getElementById('history-count').textContent = data.total_accounts || 0;
+    const logEl = document.getElementById('history-log');
+    if (!data.files?.length) {
+      logEl.innerHTML = `<div style="font-size:13px;color:var(--text3)">尚無上傳紀錄</div>`;
+    } else {
+      logEl.innerHTML = data.files.map(f => `
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);color:var(--text2)">
+          <span>${f.filename}</span><span style="color:var(--text3)">${f.uploaded_at}</span>
+        </div>`).join('');
+    }
+    const note = await api('GET', '/api/dev/history/note');
+    document.getElementById('history-note').value = note.note || '';
+  } catch(e) {}
+}
+
+async function uploadHistory(input) {
+  const file = input.files[0]; if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    toast('上傳中...', 'ok');
+    const data = await api('POST', '/api/dev/history/upload', fd, true);
+    toast(`上傳完成，共 ${data.total_accounts} 筆帳號`, 'ok');
+    loadHistory();
+  } catch(e) { toast('上傳失敗：' + e.message, 'err'); }
+  input.value = '';
+}
+
+async function resetHistory() {
+  if (!confirm('確定清除所有歷史資料？此操作無法復原。')) return;
+  try {
+    await api('DELETE', '/api/dev/history/reset');
+    toast('歷史資料已清除', 'ok'); loadHistory();
+  } catch(e) { toast('清除失敗：' + e.message, 'err'); }
+}
+
+async function saveNote() {
+  const note = document.getElementById('history-note').value;
+  try {
+    await api('POST', '/api/dev/history/note', { note });
+    toast('備忘錄已儲存', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  修改密碼
+// ══════════════════════════════════════════════════════════
+async function changePassword() {
+  const cur = document.getElementById('pw-cur').value;
+  const newPw = document.getElementById('pw-new').value;
+  const confirm2 = document.getElementById('pw-confirm').value;
+  if (!cur || !newPw) { toast('請填寫所有欄位', 'err'); return; }
+  if (newPw !== confirm2) { toast('新密碼不一致', 'err'); return; }
+  if (newPw.length < 6) { toast('新密碼至少 6 碼', 'err'); return; }
+  try {
+    await api('POST', '/api/dev/change-password', { current: cur, new: newPw });
+    TOKEN = newPw;
+    toast('密碼更新成功', 'ok');
+    ['pw-cur','pw-new','pw-confirm'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) { toast('更新失敗：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  匯出 / 匯入
+// ══════════════════════════════════════════════════════════
+async function exportConfig() {
+  try {
+    const res = await fetch('/api/dev/export', { headers: { 'X-Dev-Token': TOKEN } });
+    if (!res.ok) throw new Error('匯出失敗');
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*=UTF-8''(.+)/);
+    const filename = m ? decodeURIComponent(m[1]) : 'v3_config.json';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast('設定已匯出', 'ok');
+  } catch(e) { toast('匯出失敗：' + e.message, 'err'); }
+}
+
+async function importConfig(input) {
+  const file = input.files[0]; if (!file) return;
+  if (!confirm(`確定匯入「${file.name}」？這將覆蓋現有設定。`)) { input.value = ''; return; }
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const data = await api('POST', '/api/dev/import', fd, true);
+    toast(`匯入成功（匯出時間：${data.imported_at || '未知'}）`, 'ok');
+    await loadAll();
+  } catch(e) { toast('匯入失敗：' + e.message, 'err'); }
+  input.value = '';
+}
+
+// Enter 登入
+document.getElementById('login-pw').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+</script>
+</body>
+</html>
