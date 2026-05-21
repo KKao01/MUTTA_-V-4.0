@@ -396,6 +396,7 @@ select.form-control { cursor: pointer; }
         <div class="page-sub">匯入商品總表 → 設定每筆規格對應的母子分類</div>
       </div>
       <div class="page-actions">
+        <button class="btn btn-secondary" onclick="openAddSpecModal()">➕ 新增規格</button>
         <label class="btn btn-secondary">
           📥 匯入總表 Excel
           <input type="file" accept=".xlsx,.xls" style="display:none" onchange="parseProductExcel(this)">
@@ -735,6 +736,26 @@ select.form-control { cursor: pointer; }
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════
+     彈窗：新增規格（手動）
+════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-add-spec">
+  <div class="modal">
+    <div class="modal-title">新增規格</div>
+    <div class="form-group">
+      <label class="form-label">規格字串</label>
+      <input class="form-control" id="new-spec-key" placeholder="例：豐盈小紫洗髮精/極潤亮澤潤髮乳">
+    </div>
+    <div class="form-label" style="margin-bottom:8px">子分類條件</div>
+    <div id="new-spec-conditions"></div>
+    <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="addNewSpecCondition()">+ 新增條件</button>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-add-spec')">取消</button>
+      <button class="btn btn-primary" onclick="confirmAddSpec()">新增</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -1022,6 +1043,86 @@ async function saveSpecMap() {
     await api('POST', '/api/dev/spec-map', newMap);
     toast('規格對照儲存完成', 'ok');
   } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+// ── 新增規格（手動）──────────────────────────────────────
+function newSpecCondRowHtml(idx, cond={}) {
+  return `
+    <div class="new-spec-cond-row" data-idx="${idx}" style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+      <select class="form-control nsp-parent" onchange="onNewSpecParentChange(this)" style="flex:2;font-size:13px">
+        ${parentOptions(cond.parent||'')}
+      </select>
+      <select class="form-control nsp-child" style="flex:2;font-size:13px">
+        ${childOptions(cond.parent||'', cond.child||'')}
+      </select>
+      <input type="number" class="form-control nsp-qty" value="${cond.qty||1}" min="1" style="width:60px;font-size:13px">
+      <button onclick="removeNewSpecCondition(this)"
+        style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 4px"
+        title="刪除此條件">✕</button>
+    </div>`;
+}
+
+function openAddSpecModal() {
+  document.getElementById('new-spec-key').value = '';
+  const container = document.getElementById('new-spec-conditions');
+  container.innerHTML = newSpecCondRowHtml(0);
+  showModal('modal-add-spec');
+  setTimeout(() => document.getElementById('new-spec-key').focus(), 50);
+}
+
+function addNewSpecCondition() {
+  const container = document.getElementById('new-spec-conditions');
+  const idx = container.querySelectorAll('.new-spec-cond-row').length;
+  container.insertAdjacentHTML('beforeend', newSpecCondRowHtml(idx));
+}
+
+function removeNewSpecCondition(btn) {
+  const container = document.getElementById('new-spec-conditions');
+  const rows = container.querySelectorAll('.new-spec-cond-row');
+  if (rows.length <= 1) { toast('至少需要一個條件', 'err'); return; }
+  btn.closest('.new-spec-cond-row').remove();
+}
+
+function onNewSpecParentChange(selectEl) {
+  const row = selectEl.closest('.new-spec-cond-row');
+  const childSel = row.querySelector('.nsp-child');
+  childSel.innerHTML = childOptions(selectEl.value);
+}
+
+function confirmAddSpec() {
+  const spec = document.getElementById('new-spec-key').value.trim();
+  if (!spec) { toast('請輸入規格字串', 'err'); return; }
+
+  // 重複檢查（阻擋）
+  if (specRows.some(r => r.spec === spec)) {
+    toast('此規格已存在,無法新增', 'err');
+    return;
+  }
+
+  // 讀取條件
+  const conditions = [];
+  document.querySelectorAll('#new-spec-conditions .new-spec-cond-row').forEach(row => {
+    const parent = row.querySelector('.nsp-parent').value;
+    const child  = row.querySelector('.nsp-child').value;
+    const qty    = parseInt(row.querySelector('.nsp-qty').value || '1');
+    if (parent) conditions.push({ parent, child, qty });
+  });
+  if (!conditions.length) { toast('請至少設定一個有效條件(母分類不可空)', 'err'); return; }
+
+  // 插入到最上方,標記為新
+  specRows.unshift({ spec, product_name: '', is_new: true, conditions });
+  renderSpecList();
+
+  // 更新標題列
+  const sum = document.getElementById('spec-summary');
+  sum.style.display = 'block';
+  sum.innerHTML = `已設定 <b>${specRows.length}</b> 筆規格對照（商品名稱需匯入總表 Excel 才會顯示）`;
+
+  closeModal('modal-add-spec');
+  toast('已新增,記得按「儲存對照」', 'ok');
+
+  // 捲到最上方,讓使用者看到剛新增的那一筆
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ══════════════════════════════════════════════════════════
