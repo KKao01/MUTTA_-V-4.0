@@ -1,4 +1,4 @@
-# 沐塔 MUTTA 分單系統 V4（合併版）
+# 沐塔 MUTTA 分單系統 V4.1（合併版）
 
 ## 架構
 - 單一後端 main.py，依前端 `shipper` 參數內部分流
@@ -68,3 +68,14 @@ mutta_merged/
 ### 引擎
 - `v4_engine.py`：7-11 用，不變
 - `v4_engine_sf.py`：順豐用，與 7-11 唯一差異 = `generate_page()` 跳過 `extract_tear_image()`，上半部留白
+
+## V4.1 新增
+
+### 滿額贈系統整合
+- 接入 [MUTTA Gift Builder](https://github.com/KKao01/MUTTA_gift_builder) 輸出的設定檔
+- 訂單備註中的 `#MG:gift1*3,gift2*2` 標籤會自動解析
+- 卡片新增「贈品欄」（左下角）、右上角預留「紙箱」欄位、右下整合 VIP/購物金/已購買次數/均價
+- dev 後台：「贈品規則」分頁替換為「贈品設定」（維護 Gift Builder 設定檔 + ID → 顯示片段對應表 + 固定後綴）
+
+### 新檔
+- `app/gift_parser.py`：贈品標籤解析器

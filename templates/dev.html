@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>開發者模式 — 分單系統 V3</title>
+<title>開發者模式 — 分單系統 V4.1</title>
 <style>
 :root {
   --bg: #0d0d0f;
@@ -329,7 +329,7 @@ select.form-control { cursor: pointer; }
   <div class="login-box">
     <div class="login-cross">+ &nbsp; M U T T A &nbsp; +</div>
     <div class="login-brand">MUTTA<span class="login-dot">·</span>DEV</div>
-    <div class="login-sub">分 單 系 統 _ v 3</div>
+    <div class="login-sub">分 單 系 統 _ v 4 . 1</div>
     <input class="login-input" type="password" id="login-pw" placeholder="· · · · · · · ·"
       onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">進 入 系 統</button>
@@ -352,7 +352,7 @@ select.form-control { cursor: pointer; }
     </div>
     <div class="sf-logo-info">
       <div class="title">沐塔分單系統</div>
-      <div class="sub">開發者後台 V4</div>
+      <div class="sub">開發者後台 V4.1</div>
     </div>
   </div>
 
@@ -360,7 +360,7 @@ select.form-control { cursor: pointer; }
   <div class="nav-item"        onclick="nav('categories')" id="nav-categories"><span class="nav-icon">🏷️</span> 母子分類</div>
   <div class="nav-item"        onclick="nav('boxtypes')"   id="nav-boxtypes">  <span class="nav-icon">📦</span> 箱型管理</div>
   <div class="nav-item"        onclick="nav('rules')"      id="nav-rules">     <span class="nav-icon">⚙️</span> 分類規則</div>
-  <div class="nav-item"        onclick="nav('gifts')"      id="nav-gifts">     <span class="nav-icon">🎁</span> 贈品規則</div>
+  <div class="nav-item"        onclick="nav('giftnew')"    id="nav-giftnew">   <span class="nav-icon">🎁</span> 贈品設定</div>
   <div class="nav-item"        onclick="nav('discount')"   id="nav-discount">  <span class="nav-icon">💸</span> 折扣單設定</div>
   <div class="nav-item"        onclick="nav('remark')"     id="nav-remark">    <span class="nav-icon">💬</span> 訂單備註設定</div>
   <div class="nav-item"        onclick="nav('sffixed')"    id="nav-sffixed">   <span class="nav-icon">📮</span> 順豐寄件方</div>
@@ -485,31 +485,59 @@ select.form-control { cursor: pointer; }
     </div>
   </div>
 
-  <!-- ── 贈品規則 ── -->
-  <div class="page" id="page-gifts">
+  <!-- ── 贈品設定（V4.1 新版，接 Gift Builder）── -->
+  <div class="page" id="page-giftnew">
     <div class="page-header">
       <div>
-        <div class="page-title">贈品規則</div>
-        <div class="page-sub">設定每個分類對應的女性/男性贈品內容與箱型</div>
-      </div>
-      <div class="page-actions">
-        <button class="btn btn-secondary" onclick="showAddGiftModal()">+ 新增贈品規則</button>
-        <button class="btn btn-primary" onclick="saveGifts()">💾 儲存</button>
+        <div class="page-title">贈品設定</div>
+        <div class="page-sub">從 Gift Builder 匯入贈品設定，維護 ID → 顯示片段對應表</div>
       </div>
     </div>
-    <div class="card" style="padding:0">
+
+    <!-- 區塊 1：Gift Builder 設定檔 -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent2)">📤 Gift Builder 設定檔</div>
+      <div class="form-group">
+        <label class="form-label">貼上 Gift Builder 匯出的 JSON</label>
+        <textarea class="form-control" id="gb-config-textarea" rows="6"
+          placeholder='{"version":5,"tiers":[...],"gifts":[{"id":"gift1",...}],...}'
+          style="font-family:monospace;font-size:11px"></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="loadGbConfigFromFile()">📁 從檔案載入</button>
+        <input type="file" id="gb-config-file" accept=".json" style="display:none" onchange="onGbConfigFile(event)">
+        <button class="btn btn-primary" onclick="saveGbConfig()">💾 儲存設定檔</button>
+      </div>
+      <div id="gb-summary" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>
+    </div>
+
+    <!-- 區塊 2：ID → 顯示片段對應表 -->
+    <div class="card" style="margin-bottom:14px;padding:0">
+      <div style="padding:14px 14px 8px;font-size:13px;font-weight:700;color:var(--accent2)">
+        🏷️ 贈品 ID → 顯示片段對應表
+      </div>
+      <div style="padding:0 14px 8px;font-size:11px;color:var(--text3)">
+        規則：多個贈品用 + 串接、數量 &gt; 1 才顯示 ×N、最後加固定後綴
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th style="width:18%">分類名稱</th>
-            <th style="width:12%">箱型</th>
-            <th style="width:30%">女性贈品</th>
-            <th style="width:30%">男性贈品</th>
-            <th style="width:10%"></th>
+            <th style="width:15%">Gift ID</th>
+            <th style="width:40%">原始名稱（Gift Builder）</th>
+            <th>顯示片段</th>
           </tr></thead>
-          <tbody id="gifts-list"></tbody>
+          <tbody id="gift-display-list"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- 區塊 3：固定後綴 -->
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">固定後綴（只在有贈品時加，例如「卡」）</label>
+        <input class="form-control" id="gift-fixed-suffix" placeholder="例：卡（留空表示沒有後綴）" style="max-width:300px">
+      </div>
+      <button class="btn btn-primary" onclick="saveGiftDisplayMap()">💾 儲存對應表與後綴</button>
     </div>
   </div>
 
@@ -708,35 +736,6 @@ select.form-control { cursor: pointer; }
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     彈窗：新增贈品規則
-════════════════════════════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-add-gift">
-  <div class="modal">
-    <div class="modal-title">新增贈品規則</div>
-    <div class="form-group">
-      <label class="form-label">分類名稱</label>
-      <input class="form-control" id="new-gift-cat" placeholder="例：粉+橘（一大一小高）">
-    </div>
-    <div class="form-group">
-      <label class="form-label">箱型</label>
-      <select class="form-control" id="new-gift-box"></select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">女性贈品</label>
-      <input class="form-control" id="new-gift-female" placeholder="《...》">
-    </div>
-    <div class="form-group">
-      <label class="form-label">男性贈品（留空同女性）</label>
-      <input class="form-control" id="new-gift-male" placeholder="留空同女性">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-add-gift')">取消</button>
-      <button class="btn btn-primary" onclick="confirmAddGift()">新增</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════
      彈窗：新增規格（手動）
 ════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modal-add-spec">
@@ -763,7 +762,7 @@ select.form-control { cursor: pointer; }
 //  狀態
 // ══════════════════════════════════════════════════════════
 let TOKEN = '';
-let categories = {}, specRows = [], rules = {}, gifts = {}, boxTypes = [];
+let categories = {}, specRows = [], rules = {}, boxTypes = [];
 
 // ══════════════════════════════════════════════════════════
 //  明暗切換
@@ -870,17 +869,20 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
 //  載入所有設定
 // ══════════════════════════════════════════════════════════
 async function loadAll() {
-  const [cfg, sm, r, g, bt] = await Promise.all([
+  const [cfg, sm, r, bt, gb, gdm] = await Promise.all([
     api('GET', '/api/dev/config'),
     api('GET', '/api/dev/spec-map'),
     api('GET', '/api/dev/classification-rules'),
-    api('GET', '/api/dev/gift-rules'),
     api('GET', '/api/dev/box-types'),
+    api('GET', '/api/dev/gift-builder-config'),
+    api('GET', '/api/dev/gift-display-map'),
   ]);
   categories = cfg.categories || {};
   rules = r || {};
-  gifts = g || {};
   boxTypes = bt || [];
+  giftBuilderCfg = gb || {};
+  giftDisplayMap = gdm.display_map || {};
+  giftFixedSuffix = gdm.fixed_suffix || '';
 
   document.getElementById('discount-values').value = (cfg.discount_excludes || []).join(', ');
   document.getElementById('discount-threshold').value = cfg.discount_threshold ?? 157;
@@ -908,7 +910,7 @@ async function loadAll() {
   renderCategories();
   renderBoxTypes();
   renderRules();
-  renderGifts();
+  renderGiftDisplay();   // V4.1 新增
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1191,12 +1193,6 @@ function renderBoxTypes() {
       ⠿ ${b}<span class="remove" onclick="deleteBoxType(${i})">✕</span>
     </span>
   `).join('');
-  // 同步更新贈品規則新增彈窗的箱型選單
-  const sel = document.getElementById('new-gift-box');
-  if (sel) {
-    sel.innerHTML = `<option value="">-- 不指定 --</option>` +
-      boxTypes.map(b => `<option value="${b}">${b}</option>`).join('');
-  }
 }
 
 function addBoxType() {
@@ -1206,12 +1202,10 @@ function addBoxType() {
   boxTypes.push(name);
   document.getElementById('new-box-name').value = '';
   renderBoxTypes();
-  renderGifts();
 }
 function deleteBoxType(i) {
   boxTypes.splice(i, 1);
   renderBoxTypes();
-  renderGifts();
 }
 async function saveBoxTypes() {
   try {
@@ -1342,90 +1336,97 @@ async function saveRules() {
 }
 
 // ══════════════════════════════════════════════════════════
-//  贈品規則
+//  贈品設定（V4.1 新版）
 // ══════════════════════════════════════════════════════════
-function renderGifts() {
-  const tbody = document.getElementById('gifts-list');
-  tbody.innerHTML = Object.keys(gifts).map(cat => {
-    const key = encodeURIComponent(cat);
-    const boxSel = boxTypes.map(b =>
-      `<option value="${b}" ${gifts[cat]?.box===b?'selected':''}>${b}</option>`
-    ).join('');
-    return `<tr>
-      <td>
-        <input type="text" class="form-control" id="gf-cat-${key}"
-          value="${cat}" style="min-width:120px;font-size:12px">
-      </td>
-      <td>
-        <select class="form-control" id="gf-box-${key}" style="font-size:12px;min-width:90px">
-          <option value="">-- 不指定 --</option>
-          ${boxSel}
-        </select>
-      </td>
-      <td>
-        <input type="text" class="form-control" id="gf-f-${key}"
-          value="${gifts[cat]?.female || ''}" style="min-width:180px;font-size:12px">
-      </td>
-      <td>
-        <input type="text" class="form-control" id="gf-m-${key}"
-          value="${gifts[cat]?.male || ''}" placeholder="留空同女性" style="min-width:180px;font-size:12px">
-      </td>
-      <td>
-        <button class="btn btn-danger btn-xs" onclick="deleteGift('${cat}')">刪除</button>
-      </td>
-    </tr>`;
+let giftBuilderCfg  = {};
+let giftDisplayMap  = {};
+let giftFixedSuffix = '';
+
+function renderGiftDisplay() {
+  // 載入 textarea
+  document.getElementById('gb-config-textarea').value =
+    giftBuilderCfg && Object.keys(giftBuilderCfg).length
+      ? JSON.stringify(giftBuilderCfg, null, 2) : '';
+
+  // 載入固定後綴
+  document.getElementById('gift-fixed-suffix').value = giftFixedSuffix || '';
+
+  // 載入摘要
+  const gifts = giftBuilderCfg.gifts || [];
+  const sum = document.getElementById('gb-summary');
+  if (gifts.length) {
+    sum.innerHTML = `已載入 <b>${gifts.length}</b> 個贈品：${gifts.map(g => g.id).join(', ')}`;
+  } else {
+    sum.innerHTML = `<span style="color:#c0392b">尚未匯入設定檔</span>`;
+  }
+
+  // 載入對應表
+  const tbody = document.getElementById('gift-display-list');
+  if (!gifts.length) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:24px">請先匯入 Gift Builder 設定檔</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = gifts.map(g => {
+    const cur = giftDisplayMap[g.id] || '';
+    const enabled = g.enabled !== false;
+    return `
+      <tr ${enabled ? '' : 'style="opacity:0.4"'}>
+        <td style="font-family:monospace;font-size:12px">${g.id}${enabled ? '' : ' (停用)'}</td>
+        <td style="font-size:12px">${g.name || ''}</td>
+        <td><input class="form-control" id="gd-${g.id}" value="${cur.replace(/"/g, '&quot;')}"
+            placeholder="例：洗髮包" style="font-size:13px"></td>
+      </tr>
+    `;
   }).join('');
 }
 
-function showAddGiftModal() {
-  document.getElementById('new-gift-cat').value = '';
-  document.getElementById('new-gift-female').value = '';
-  document.getElementById('new-gift-male').value = '';
-  const sel = document.getElementById('new-gift-box');
-  sel.innerHTML = `<option value="">-- 不指定 --</option>` +
-    boxTypes.map(b => `<option value="${b}">${b}</option>`).join('');
-  showModal('modal-add-gift');
+function loadGbConfigFromFile() {
+  document.getElementById('gb-config-file').click();
 }
 
-function confirmAddGift() {
-  const cat    = document.getElementById('new-gift-cat').value.trim();
-  const box    = document.getElementById('new-gift-box').value;
-  const female = document.getElementById('new-gift-female').value.trim();
-  const male   = document.getElementById('new-gift-male').value.trim();
-  if (!cat) { toast('請輸入分類名稱', 'err'); return; }
-  if (!female) { toast('請輸入女性贈品', 'err'); return; }
-  gifts[cat] = { box, female, male: male || female };
-  renderGifts();
-  closeModal('modal-add-gift');
+function onGbConfigFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('gb-config-textarea').value = e.target.result;
+  };
+  reader.readAsText(file);
 }
 
-function deleteGift(cat) {
-  if (!confirm(`確定刪除「${cat}」的贈品規則？`)) return;
-  delete gifts[cat];
-  renderGifts();
-}
-
-async function saveGifts() {
-  // 從頁面讀取最新值（含分類名稱編輯）
-  const newGifts = {};
-  Object.keys(gifts).forEach(cat => {
-    const key = encodeURIComponent(cat);
-    const catEl = document.getElementById(`gf-cat-${key}`);
-    const boxEl = document.getElementById(`gf-box-${key}`);
-    const fEl   = document.getElementById(`gf-f-${key}`);
-    const mEl   = document.getElementById(`gf-m-${key}`);
-    if (!catEl) return;
-    const newCat = catEl.value.trim() || cat;
-    const box    = boxEl ? boxEl.value : '';
-    const female = fEl ? fEl.value.trim() : '';
-    const male   = mEl ? mEl.value.trim() : '';
-    newGifts[newCat] = { box, female, male: male || female };
-  });
-  gifts = newGifts;
+async function saveGbConfig() {
+  const text = document.getElementById('gb-config-textarea').value.trim();
+  if (!text) { toast('請貼上 JSON', 'err'); return; }
+  let parsed;
   try {
-    await api('POST', '/api/dev/gift-rules', gifts);
-    toast('贈品規則儲存完成', 'ok');
-    renderGifts();
+    parsed = JSON.parse(text);
+  } catch(e) { toast('JSON 格式錯誤', 'err'); return; }
+  try {
+    await api('POST', '/api/dev/gift-builder-config', parsed);
+    giftBuilderCfg = parsed;
+    renderGiftDisplay();
+    toast('Gift Builder 設定檔儲存完成', 'ok');
+  } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
+}
+
+async function saveGiftDisplayMap() {
+  const newMap = {};
+  for (const g of (giftBuilderCfg.gifts || [])) {
+    const el = document.getElementById(`gd-${g.id}`);
+    if (el) {
+      const v = el.value.trim();
+      if (v) newMap[g.id] = v;
+    }
+  }
+  const suffix = document.getElementById('gift-fixed-suffix').value.trim();
+  try {
+    await api('POST', '/api/dev/gift-display-map', {
+      display_map: newMap,
+      fixed_suffix: suffix,
+    });
+    giftDisplayMap  = newMap;
+    giftFixedSuffix = suffix;
+    toast('對應表與後綴儲存完成', 'ok');
   } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
 }
 

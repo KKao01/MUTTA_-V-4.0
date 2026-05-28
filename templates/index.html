@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>沐塔 MUTTA｜分單系統 V4</title>
+<title>沐塔 MUTTA｜分單系統 V4.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -204,7 +204,7 @@
     </div>
     <div class="logo-info">
       <h1>Mutta沐塔分單系統</h1>
-      <p id="logo-sub">超商模式 V4</p>
+      <p id="logo-sub">超商模式 V4.1</p>
     </div>
     <div class="shipper-switch" role="tablist" aria-label="物流模式">
       <button id="btn-shipper-seven" class="active" onclick="switchShipper('seven')">7-11</button>
@@ -251,16 +251,6 @@
       <input type="file" id="input-csv" accept=".csv" multiple onchange="onFile('csv',this)">
       <div class="file-list" id="list-csv"></div>
     </div>
-  </div>
-
-  <!-- Options -->
-  <div class="options-bar">
-    <label class="toggle">
-      <input type="checkbox" id="giftToggle" onchange="updateGiftBadge()">
-      <span class="slider"></span>
-    </label>
-    <span class="toggle-label">列印贈品資訊</span>
-    <span class="gift-badge" id="giftBadge">關閉，不印贈品</span>
   </div>
 
   <!-- Progress -->
@@ -348,7 +338,6 @@
 // ══════════════════════════════════════════════════════════
 let shipper = 'seven';                              // 'seven' | 'sf'
 let files = { pdf: null, excel: null, csv: null };  // 加入 csv
-let printGift = false;
 let jobId = null;
 let pollTimer = null;
 
@@ -359,14 +348,14 @@ const SHIPPER_PROFILE = {
   seven: {
     bodyClass: 'shipper-seven',
     logo: ['7-ELEVEN', 'CONVENIENCE', 'STORE 24H'],
-    sub:  '超商模式 V4',
-    title:'沐塔 MUTTA｜分單系統 V4 — 超商',
+    sub:  '超商模式 V4.1',
+    title:'沐塔 MUTTA｜分單系統 V4.1 — 超商',
   },
   sf: {
     bodyClass: 'shipper-sf',
     logo: ['SF', 'EXPRESS', 'SPEED & SAFETY'],
-    sub:  '順豐模式 V4',
-    title:'沐塔 MUTTA｜分單系統 V4 — 順豐',
+    sub:  '順豐模式 V4.1',
+    title:'沐塔 MUTTA｜分單系統 V4.1 — 順豐',
   },
 };
 
@@ -500,15 +489,6 @@ function checkReady() {
 }
 
 // ══════════════════════════════════════════════════════════
-//  選項
-// ══════════════════════════════════════════════════════════
-function toggleGift() {
-  printGift = !printGift;
-  const t = document.getElementById('toggle-gift');
-  t.classList.toggle('on', printGift);
-}
-
-// ══════════════════════════════════════════════════════════
 //  開始分單
 // ══════════════════════════════════════════════════════════
 async function startProcess() {
@@ -536,9 +516,7 @@ async function startProcess() {
     if (uploadData.excel_name) addLog(`Excel：${uploadData.excel_name}`);
     if (uploadData.csv_name)   addLog(`CSV：${uploadData.csv_name}`);
 
-    const pfd = new FormData();
-    pfd.append('print_gift', printGift ? 'true' : 'false');
-    const procRes = await fetch(`/api/process/${jobId}`, { method: 'POST', body: pfd });
+    const procRes = await fetch(`/api/process/${jobId}`, { method: 'POST' });
     if (!procRes.ok) throw new Error((await procRes.json()).detail);
 
     pollTimer = setInterval(pollStatus, 800);
@@ -691,15 +669,6 @@ function triggerUpload(type) { document.getElementById('input-' + type).click();
     renderFileList(type);
   });
 });
-
-function updateGiftBadge() {
-  const on = document.getElementById('giftToggle').checked;
-  printGift = on;
-  const b = document.getElementById('giftBadge');
-  b.textContent = on ? '開啟，印贈品' : '關閉，不印贈品';
-  b.style.background = on ? '#dcfce7' : '#fee2e2';
-  b.style.color = on ? '#15803d' : 'var(--sf-red)';
-}
 
 function openModal(type) {
   modalSteps[type]=0; updateModalUI(type);

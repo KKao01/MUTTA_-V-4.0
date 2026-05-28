@@ -1,5 +1,5 @@
 """
-分單系統 V4 — FastAPI 後端（合併版：7-11 + 順豐）
+分單系統 V4.1 — FastAPI 後端（合併版：7-11 + 順豐）
 
 架構：
   - 單一入口 main.py，依前端傳入的 shipper 參數內部分流
@@ -39,13 +39,18 @@ DEFAULT_CONFIG = {
     "categories": {},
     "spec_map": {},
     "classification_rules": {},
-    "gift_rules": {},
+    "gift_rules": {},                # V4.1 起不再從 dev 後台 UI 維護（API 仍保留）
     "discount_excludes": [50, 120, 170],
     "discount_threshold": 157,
     "discount_min_count": 3,
     "avg_price_threshold": 450,
     "remark_excludes": ["無", "沒有", "NO", "no", "無備註"],
     "box_types": ["小空矮", "一大一小高", "一大兩小", "兩小高", "兩小矮", "2+1空"],
+
+    # === 滿額贈整合（V4.1） ===
+    "gift_builder_config": {},   # Gift Builder 完整 JSON（來自 mutta_gift_builder 匯出）
+    "gift_display_map": {},      # ID → 顯示片段, 例：{"gift1": "洗髮包", "gift2": "梳"}
+    "gift_fixed_suffix": "",     # 固定後綴, 例："卡"
 
     # 順豐固定欄位（合併自順豐 V3）
     "sf_fixed": {
@@ -114,20 +119,15 @@ def verify_dev_password(password: str) -> bool:
 #  歷史購買
 # ══════════════════════════════════════════════════════════════════════════════
 def rebuild_summary():
-    import openpyxl
-    existing: dict = {}
-    if SUMMARY_FILE.exists():
-        try:
-            wb_e = openpyxl.load_workbook(str(SUMMARY_FILE), read_only=True)
-            ws_e = wb_e.active
-            for row in list(ws_e.iter_rows(values_only=True))[1:]:
-                if row[0] and row[1]:
-                    existing[str(row[0]).strip()] = int(row[1])
-            wb_e.close()
-        except Exception:
-            pass
+    """從 HISTORY_DIR 內當下所有 xlsx 檔重新計算,不 merge 舊 summary、不刪原檔。
 
-    new_orders: dict = {}
+    這樣設計可避免「同檔被重複加 N 次」的累加 bug(原本依賴 unlink 來避免重複,
+    但 Windows 常因 file lock 導致 unlink 靜默失敗)。每次 rebuild 都從零重算,
+    結果只跟當下資料夾內檔案有關,可重複呼叫且結果一致。
+    """
+    import openpyxl
+
+    all_orders: dict = {}   # key -> set of oid (跨檔自動去重)
     for f in sorted(HISTORY_DIR.glob("*.xlsx")):
         if f.name == "purchase_summary.xlsx":
             continue
@@ -146,17 +146,21 @@ def rebuild_summary():
                 except (ValueError, IndexError):
                     return None
 
+            # legacy 格式（2024/2025 舊版）沒有「對帳完成時間」欄，視同全部已對帳
+            has_settled_col = "對帳完成時間" in header
+
             for row in rows[1:]:
-                settled = get_col("對帳完成時間", row)
-                if not settled or str(settled).strip() in ("", "None"):
-                    continue
+                if has_settled_col:
+                    settled = get_col("對帳完成時間", row)
+                    if not settled or str(settled).strip() in ("", "None"):
+                        continue
                 oid     = str(get_col("訂單編號", row) or "").strip()
                 account = str(get_col("會員帳號", row) or get_col("Email", row) or "").strip()
                 name    = str(get_col("購買人姓名", row) or get_col("姓名", row) or "").strip()
                 if not oid or not account or account == "None":
                     continue
                 key = f"{account[:8].lower()}:{name}"
-                new_orders.setdefault(key, set()).add(oid)
+                all_orders.setdefault(key, set()).add(oid)
         except Exception:
             pass
         finally:
@@ -164,14 +168,8 @@ def rebuild_summary():
                 if wb: wb.close()
             except Exception:
                 pass
-            try:
-                f.unlink()
-            except Exception:
-                pass
 
-    merged = dict(existing)
-    for key, oids in new_orders.items():
-        merged[key] = merged.get(key, 0) + len(oids)
+    merged = {key: len(oids) for key, oids in all_orders.items()}
 
     wb_out = openpyxl.Workbook()
     ws_out = wb_out.active
@@ -208,7 +206,7 @@ job_store: dict[str, dict] = {}
 # ══════════════════════════════════════════════════════════════════════════════
 #  App
 # ══════════════════════════════════════════════════════════════════════════════
-app = FastAPI(title="分單系統 V4 (合併版)", docs_url=None, redoc_url=None)
+app = FastAPI(title="分單系統 V4.1 (合併版)", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 (BASE_DIR / "static").mkdir(parents=True, exist_ok=True)
@@ -322,7 +320,7 @@ async def upload_files(
 
 
 @app.post("/api/process/{job_id}")
-async def process(job_id: str, print_gift: bool = Form(True)):
+async def process(job_id: str):
     if job_id not in job_store:
         raise HTTPException(404, "找不到此任務")
     job = job_store[job_id]
@@ -332,20 +330,20 @@ async def process(job_id: str, print_gift: bool = Form(True)):
     job["status"]   = "running"
     job["logs"]     = []
     job["progress"] = 0
-    asyncio.create_task(_run_job(job_id, print_gift))
+    asyncio.create_task(_run_job(job_id))
     return {"ok": True}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  分流 dispatcher
 # ══════════════════════════════════════════════════════════════════════════════
-async def _run_job(job_id: str, print_gift: bool):
+async def _run_job(job_id: str):
     job = job_store[job_id]
     shipper = job.get("shipper", "seven")
     if shipper == "sf":
-        await _run_job_sf(job_id, print_gift)
+        await _run_job_sf(job_id)
     else:
-        await _run_job_seven(job_id, print_gift)
+        await _run_job_seven(job_id)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -489,7 +487,7 @@ def _build_v4_qty(items: list, spec_map: dict) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 #  7-11 流程（V4 + 撕線區擷取）
 # ══════════════════════════════════════════════════════════════════════════════
-async def _run_job_seven(job_id: str, print_gift: bool):
+async def _run_job_seven(job_id: str):
     job = job_store[job_id]
 
     def log(msg: str, tag: str = ""):
@@ -560,6 +558,28 @@ async def _run_job_seven(job_id: str, print_gift: bool):
         log("✓ 訂單號碼完全吻合", "ok")
         job["progress"] = 50
 
+        # ── 5.5 解析 #MG: 贈品標籤（V4.1 新增） ──
+        import gift_parser as gp
+        gb_cfg        = cfg.get("gift_builder_config", {})
+        display_map   = cfg.get("gift_display_map", {})
+        fixed_suffix  = cfg.get("gift_fixed_suffix", "")
+        fallback_map  = {g["id"]: g.get("name", g["id"])
+                         for g in gb_cfg.get("gifts", [])}
+
+        gift_hit = 0
+        for o in orders:
+            clean_remark, gift_display, has_gift = gp.process_order_remark(
+                o.get("remark", ""),
+                display_map,
+                fixed_suffix,
+                fallback_map,
+            )
+            o["remark"]       = clean_remark   # 覆寫成乾淨備註（避免被分到備註訂單）
+            o["gift_display"] = gift_display   # 給 v4_engine 畫贈品欄用
+            if has_gift:
+                gift_hit += 1
+        log(f"贈品解析完成：{gift_hit} 筆訂單含 #MG: 標籤", "ok" if gift_hit else "")
+
         # 6. 分類
         log("進行分類判斷...")
         for o in orders:
@@ -610,7 +630,7 @@ async def _run_job_seven(job_id: str, print_gift: bool):
 # ══════════════════════════════════════════════════════════════════════════════
 #  順豐流程（V4 + 上半部留白 + CSV + 順豐批量下單 Excel）
 # ══════════════════════════════════════════════════════════════════════════════
-async def _run_job_sf(job_id: str, print_gift: bool):
+async def _run_job_sf(job_id: str):
     job = job_store[job_id]
 
     def log(msg: str, tag: str = ""):
@@ -693,6 +713,28 @@ async def _run_job_sf(job_id: str, print_gift: bool):
 
         log("✓ 訂單號碼驗證通過", "ok")
         job["progress"] = 50
+
+        # ── 6.5 解析 #MG: 贈品標籤（V4.1 新增） ──
+        import gift_parser as gp
+        gb_cfg        = cfg.get("gift_builder_config", {})
+        display_map   = cfg.get("gift_display_map", {})
+        fixed_suffix  = cfg.get("gift_fixed_suffix", "")
+        fallback_map  = {g["id"]: g.get("name", g["id"])
+                         for g in gb_cfg.get("gifts", [])}
+
+        gift_hit = 0
+        for o in orders:
+            clean_remark, gift_display, has_gift = gp.process_order_remark(
+                o.get("remark", ""),
+                display_map,
+                fixed_suffix,
+                fallback_map,
+            )
+            o["remark"]       = clean_remark   # 覆寫成乾淨備註（避免被分到備註訂單）
+            o["gift_display"] = gift_display   # 給 v4_engine 畫贈品欄用
+            if has_gift:
+                gift_hit += 1
+        log(f"贈品解析完成：{gift_hit} 筆訂單含 #MG: 標籤", "ok" if gift_hit else "")
 
         # 7. 分類
         log("進行分類判斷...")
@@ -852,6 +894,7 @@ def _build_v4_orders(orders, cfg, pdf_info, pdf_paths, csv_data=None):
             "_cat":             v3o.get("cat", "特殊單"),
             "_page_index":      info.get("page_index", 0),
             "_pdf_path":        info.get("pdf_path", pdf_paths[0] if pdf_paths else ""),
+            "gift_display":     v3o.get("gift_display", ""),
         }
         v4_orders.append(v4o)
 
@@ -1140,6 +1183,36 @@ async def get_gift_rules(request: Request, _=Depends(require_dev_token)):
 async def save_gift_rules(request: Request, _=Depends(require_dev_token)):
     body = await request.json()
     cfg = load_config(); cfg["gift_rules"] = body; save_config(cfg)
+    return {"ok": True}
+
+# === 滿額贈整合（V4.1）===
+@app.get("/api/dev/gift-builder-config")
+async def get_gift_builder_config(request: Request, _=Depends(require_dev_token)):
+    return load_config().get("gift_builder_config", {})
+
+@app.post("/api/dev/gift-builder-config")
+async def save_gift_builder_config(request: Request, _=Depends(require_dev_token)):
+    body = await request.json()
+    cfg = load_config()
+    cfg["gift_builder_config"] = body
+    save_config(cfg)
+    return {"ok": True}
+
+@app.get("/api/dev/gift-display-map")
+async def get_gift_display_map(request: Request, _=Depends(require_dev_token)):
+    cfg = load_config()
+    return {
+        "display_map":   cfg.get("gift_display_map", {}),
+        "fixed_suffix":  cfg.get("gift_fixed_suffix", ""),
+    }
+
+@app.post("/api/dev/gift-display-map")
+async def save_gift_display_map(request: Request, _=Depends(require_dev_token)):
+    body = await request.json()
+    cfg = load_config()
+    cfg["gift_display_map"]  = body.get("display_map", {})
+    cfg["gift_fixed_suffix"] = body.get("fixed_suffix", "")
+    save_config(cfg)
     return {"ok": True}
 
 @app.post("/api/dev/discount-excludes")

@@ -1,11 +1,13 @@
 """
-V4 出貨單 - 黑白版 rev2
-修正：
+V4.1 出貨單 - 黑白版
+新增：
+  - 贈品欄（商品數量表正下方，同寬黑框）
+  - 右上角紙箱欄位（預留位置，資料來源待接）
+  - 右下整合資訊框（VIP / 購物金 / 已購買次數 / 均價）
+沿用 V4 修正：
   1. 無備註 → 不顯示備註框（完全空白，不占位）
   2. 有備註 → 顯示淺灰底框（同前）
-  3. 贈品區 → 純白底，無填色
-  4. 金額右側：label 與數字拉近（同欄位緊靠）
-  5. 左下購物金/均價 → V3 風格（無外框，純文字，行距清晰）
+  3. 金額右側：label 與數字拉近（同欄位緊靠）
 """
 
 import io, os, subprocess, tempfile
@@ -293,14 +295,28 @@ def draw_order_info(c, F, FB, order, top_y, zx, zw):
     return rem_y - rem_h   # 固定返回同樣底部位置
 
 # ─────────────────────────────────────────
+# 2.2.0.5 紙箱欄位（V4.1 預留）
+# 位置：右上角，QR 碼右側
+# 規格：資料來源待接（目前只畫格式，內容從 order.get('box_type') 來）
+# ─────────────────────────────────────────
+def draw_box_type_section(c, F, FB, order):
+    """右上角紙箱顯示。資料未接時不畫任何東西。"""
+    box_type = (order.get('box_type') or '').strip()
+    if not box_type:
+        return  # 暫未接資料，不畫
+    # 位置常數（等接資料時再微調）
+    BOX_X = 470
+    BOX_Y = A4_H - 200    # 撕線區右側
+    txt(c, "紙箱:", BOX_X, BOX_Y, F, 11)
+    txt(c, box_type, BOX_X, BOX_Y - 22, FB, 18)
+
+# ─────────────────────────────────────────
 # 2.2.2 商品格子 + 贈品區
 # Fix 3: 贈品區白底
 # ─────────────────────────────────────────
 def draw_grid(c, F, FB, order, top_y, zx, zw):
     qty     = order['qty']
-    GAP     = 6
-    grid_w  = zw * 0.60
-    gift_w  = zw - grid_w - GAP
+    grid_w  = zw          # V4.1: 商品格佔滿整寬
     cell_w  = grid_w / 6
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
@@ -311,8 +327,8 @@ def draw_grid(c, F, FB, order, top_y, zx, zw):
 
     # 分組統計（先算，用於標題列右側）
     parts   = calc_summary(qty)
-    NUM_SZ  = 18      # 統計數字大小
-    NAME_SZ = 12      # 統計組名大小
+    NUM_SZ  = 20      # 統計數字大小（V4.1 加大）
+    NAME_SZ = 13      # 統計組名大小（V4.1 加大）
     SEP     = 12      # token 間距
 
     # 商品格子外框
@@ -320,8 +336,8 @@ def draw_grid(c, F, FB, order, top_y, zx, zw):
     title_bot = top_y - TITLE_H
 
     # 標題列：「商品數量」靠左，統計靠右，垂直置中於標題列
-    title_mid_y = title_bot + (TITLE_H - 11) / 2   # 「商品數量」10pt 垂直置中
-    txt(c, "商品數量", zx + 10, title_mid_y, FB, 11)
+    title_mid_y = title_bot + (TITLE_H - 13) / 2   # 「商品數量」13pt 垂直置中
+    txt(c, "商品數量", zx + 10, title_mid_y, FB, 13)
 
     if parts:
         # 從右側往左排，先算總寬
@@ -354,7 +370,7 @@ def draw_grid(c, F, FB, order, top_y, zx, zw):
             fill_rect(c, cx, ry - name_h, cell_w, name_h,
                       BW_GRAY_BG, sc=BW_GRAY_LT, sw=0.5)
             txt(c, cat, cx + cell_w/2,
-                ry - name_h + (name_h - 12)//2, F, 12, align="center")
+                ry - name_h + (name_h - 13)//2, FB, 13, align="center")
             fill_rect(c, cx, ry - name_h - num_h, cell_w, num_h,
                       BW_WHITE, sc=BW_GRAY_LT, sw=0.5)
             n = qty.get(cat, 0)
@@ -362,35 +378,50 @@ def draw_grid(c, F, FB, order, top_y, zx, zw):
                 txt(c, str(n), cx + cell_w/2,
                     ry - name_h - num_h + 10, FB, 22, align="center")
 
-    # 贈品區（純白，無框）
-    gx = zx + grid_w + GAP
-    fill_rect(c, gx, top_y - grid_h, gift_w, grid_h, BW_WHITE)
-    txt(c, "贈 品", gx + gift_w/2, top_y - 16, FB, 10, col=BW_GRAY_MID, align="center")
-
     return top_y - grid_h
 
 # ─────────────────────────────────────────
-# 2.2.3 金額區
-# Fix 4: label 與數字拉近（右對齊欄位縮短）
-# Fix 5: 購物金/均價 → V3 風格（無框，純文字）
+# 2.2.2.5 贈品欄（V4.1 新增）
+# 規格：
+#   - 商品數量表正下方
+#   - 同 zw 寬、黑框、無填色
+#   - 左上角「贈品:」標題
+#   - 內容由 main.py 透過 gift_parser 預先組好，放在 order['gift_display']
+#   - 沒贈品時仍畫外框（內容空白）— 維持版面一致
 # ─────────────────────────────────────────
-def draw_amount(c, F, FB, order, top_y, zx, zw):
+def draw_gift_section(c, F, FB, order, top_y, zx, zw):
+    """贈品欄：有黑色外框，左上角「贈品:」標題，下方顯示贈品內容"""
+    GIFT_H     = 56          # V4.1 略加高，容納加大的字
+    PAD_X      = 10
+    PAD_TOP    = 8
+    LABEL_SZ   = 13          # V4.1 加大
+    CONTENT_SZ = 15          # V4.1 加大
+
+    # 黑色外框（同寬黑框）
+    rect_out(c, zx, top_y - GIFT_H, zw, GIFT_H, lw=1.0)
+
+    # 左上角「贈品:」標題（加粗加大）
+    txt(c, "贈品:", zx + PAD_X, top_y - PAD_TOP - LABEL_SZ + 2, FB, LABEL_SZ)
+
+    # 內容（加粗加大）
+    content = (order.get('gift_display') or '').strip()
+    if content:
+        txt(c, content, zx + PAD_X,
+            top_y - PAD_TOP - LABEL_SZ - 18,
+            FB, CONTENT_SZ)
+
+    return top_y - GIFT_H
+
+# ─────────────────────────────────────────
+# 2.2.3 金額區 + VIP 整合框（V4.1.1）
+# 規格：
+#   - VIP 框底邊錨點對齊頁面底部（bottom_y 參數）
+#   - 金額表從 VIP 框上方往上堆疊
+#   - 整合框：第一行 左 ★VIP / 右 購物金；第二行 左 均價 / 右 已購買次數
+# ─────────────────────────────────────────
+def draw_amount(c, F, FB, order, bottom_y, zx, zw):
     pad = 8
 
-    # ── VIP 標籤（白底黑字框格）──
-    vip = order.get('vip_level', '')
-    bvw, bvh = 90, 26
-    bvx = zx + pad
-    if vip in ("VIP", "SVIP"):
-        stars = "★" if vip == "VIP" else "★★"
-        bvy = top_y - bvh - 6
-        fill_rect(c, bvx, bvy, bvw, bvh, BW_WHITE, sc=BW_BLACK, sw=1.2)
-        if vip == "SVIP":
-            rect_out(c, bvx+3, bvy+3, bvw-6, bvh-6, lw=0.6, col=BW_BLACK)
-        txt(c, f"{stars} {vip}", bvx + bvw/2, bvy + 7, FB, 12,
-            col=BW_BLACK, align="center")
-
-    # ── 金額表（右側）──
     def fmt_val(v):
         if isinstance(v, float) and v == int(v):
             v = int(v)
@@ -398,8 +429,8 @@ def draw_amount(c, F, FB, order, top_y, zx, zw):
             return (f"-${abs(v):,}" if v < 0 else f"${v:,}")
         return str(v)
 
-    val_x  = zx + zw - pad   # 數字右邊界
-    NUM_W  = 72               # 數字欄寬
+    val_x  = zx + zw - pad
+    NUM_W  = 80
     lbl_rx = val_x - NUM_W - 4
 
     rows = []
@@ -414,90 +445,80 @@ def draw_amount(c, F, FB, order, top_y, zx, zw):
     rows.append(None)
     rows.append(("訂單金額", order['total'],              True))
 
-    row_h = 16
+    # V4.1.1: 縮回 V4 原值,讓 4~5 行金額表 + VIP 框塞得下頁面底部
+    row_h    = 16
+    sep_h    = 12
+    BOX_H    = 40
+    BOX_GAP  = 4
 
-    # 先計算分隔線 y（給左側框格定位）
-    _y = top_y - 8
-    sep_line_y = None
-    for row in rows:
-        if row is None:
-            sep_line_y = _y - 4
-            _y -= 10
-        else:
-            _y -= row_h
+    # 反推 top_y:bottom_y 是 VIP 框底邊
+    n_data  = sum(1 for r in rows if r is not None)
+    n_sep   = sum(1 for r in rows if r is None)
+    total_h = pad + n_data * row_h + n_sep * sep_h + BOX_GAP + BOX_H
+    top_y   = bottom_y + total_h
 
     # 繪製金額表
-    cur_y = top_y - 8
+    cur_y = top_y - pad
     for row in rows:
         if row is None:
             hline(c, lbl_rx - 60, val_x, cur_y - 4, w=0.7, col=BW_GRAY_LT)
-            cur_y -= 10; continue
+            cur_y -= sep_h
+            continue
         label, value, bold = row
-        fn, fs = (FB, 11) if bold else (F, 9.5)
-        txt(c, label, lbl_rx,  cur_y - row_h + 4, fn, fs, align="right")
-        txt(c, fmt_val(value), val_x, cur_y - row_h + 4, fn, fs, align="right")
+        if bold:
+            fn_l, fs_l = FB, 13
+            fn_v, fs_v = FB, 13
+        else:
+            fn_l, fs_l = F,  11
+            fn_v, fs_v = FB, 11
+        txt(c, label,         lbl_rx, cur_y - row_h + 4, fn_l, fs_l, align="right")
+        txt(c, fmt_val(value), val_x, cur_y - row_h + 4, fn_v, fs_v, align="right")
         cur_y -= row_h
 
-    # ──────────────────────────────────────────────────────
-    # 左側框格區塊（由上到下固定排列）：
-    #   ┌─────────────────┐  ← 已購買 N 次（固定最上）
-    #   ├─────────────────┤  ← 使用購物金（有值才顯示）
-    #   ├─────────────────┤  ← 均　　價（永遠顯示）
-    #   └─────────────────┘
-    # 位置：底部固定在分隔線，右邊界貼金額 label 左側
-    # ──────────────────────────────────────────────────────
+    # VIP 整合框（獨立規則:縮到右下角,寬度依「最滿情況」設計）
+    # 最滿情況:★★ SVIP / 均價 $1,234.5 / 購物金 $9,999 / 已購買次數 99
+    # 左半上下行、右半上下行皆「頭部對齊」(都用 align=left,固定 head x)
+    line_size = 13
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    LEFT_MAX  = max(stringWidth("★★ SVIP",       FB, line_size),
+                    stringWidth("均價 $1,234.5",  FB, line_size))
+    RIGHT_MAX = max(stringWidth("購物金 $9,999",  FB, line_size),
+                    stringWidth("已購買次數 99",  FB, line_size))
+    MID_GAP     = 12
+    inner_pad_x = 8
+    BOX_W = inner_pad_x*2 + LEFT_MAX + MID_GAP + RIGHT_MAX
+    BOX_X = zx + zw - BOX_W
+    box_y = bottom_y
 
-    # ──────────────────────────────────────────────────────
-    # 左側三格：固定位置、固定高度
-    #   ┌─────────────────┐  row 0: 已購買次數
-    #   ├─────────────────┤  row 1: 使用購物金
-    #   ├─────────────────┤  row 2: 均　　價
-    #   └─────────────────┘
-    # 有資料才印文字，沒有資料框還是存在（空框）
-    # 三格整組底部固定對齊分隔線
-    # ──────────────────────────────────────────────────────
+    c.saveState()
+    c.setStrokeColor(BW_BLACK)
+    c.setLineWidth(1.2)
+    c.rect(BOX_X, box_y, BOX_W, BOX_H, fill=0, stroke=1)
+    c.restoreState()
 
-    BOX_W   = 140   # 框格寬度
-    BOX_LBL = 10    # label 字級
-    BOX_VAL = 13    # 數字字級
-    BOX_H   = 28    # 每格高度（固定）
-    BOX_GAP = 4     # 格間距（固定）
-    box_rx  = lbl_rx - 68
-    box_lx  = box_rx - BOX_W
+    left_head_x  = BOX_X + inner_pad_x
+    right_head_x = BOX_X + BOX_W - inner_pad_x - RIGHT_MAX
 
-    # 三格固定位置定義（由上到下：index 0 最上）
-    # 位置固定；有資料才印框+文字，沒資料完全不畫
-    cnt = order.get('purchase_count', 0)
-    avg = order.get('avg_price')
+    line1_y = box_y + BOX_H - 6 - line_size
+    line2_y = box_y + 5
 
-    fixed_boxes = [
-        # i=0: 已購買次數（最上）
-        ("已購買次數", str(cnt)                       if cnt and cnt > 0           else None),
-        # i=1: 使用購物金
-        ("使用購物金", f"${order['wallet']:,}"         if order.get('wallet')       else None),
-        # i=2: 均價（最下）
-        ("均　　價",   f"${avg:.1f}"                   if avg is not None           else None),
-    ]
+    vip    = order.get('vip_level', '')
+    wallet = order.get('wallet')
+    avg    = order.get('avg_price')
+    cnt    = order.get('purchase_count', 0)
 
-    # y 座標：從 top_y-6 往下，三格位置永遠固定
-    block_top = top_y - 6
-    for i, (lb, vb) in enumerate(fixed_boxes):
-        if vb is None:
-            continue   # 無資料：跳過，不畫框也不畫文字
-        by    = block_top - (i + 1) * BOX_H - i * BOX_GAP
-        mid_y = by + (BOX_H - BOX_LBL) / 2 - 1
-        # 有資料：畫框 + 文字
-        c.setFillColor(BW_WHITE)
-        c.setStrokeColor(BW_BLACK)
-        c.setLineWidth(1.2)
-        c.rect(box_lx, by, BOX_W, BOX_H, fill=1, stroke=1)
-        c.setFillColor(BW_BLACK)
-        c.setFont(F, BOX_LBL)
-        c.drawString(box_lx + 8, mid_y, lb)
-        c.setFont(FB, BOX_VAL)
-        c.drawRightString(box_rx - 6, mid_y, vb)
+    # 左半上下行皆 align=left 於 left_head_x
+    if vip in ("VIP", "SVIP"):
+        stars = "★" if vip == "VIP" else "★★"
+        txt(c, f"{stars} {vip}", left_head_x, line1_y, FB, line_size)
+    if avg is not None:
+        txt(c, f"均價 ${avg:.1f}", left_head_x, line2_y, FB, line_size)
 
-    # 底線移除
+    # 右半上下行皆 align=left 於 right_head_x(頭部對齊)
+    if wallet:
+        txt(c, f"購物金 ${wallet:,}", right_head_x, line1_y, FB, line_size)
+    if cnt and cnt > 0:
+        txt(c, f"已購買次數 {cnt}", right_head_x, line2_y, FB, line_size)
 
 # ─────────────────────────────────────────
 # 主繪製
@@ -519,9 +540,21 @@ def generate_page(pdf_path, page_index, order, output_path):
 
     zx, zw = RDZ_X0, RDZ_W
     GAP = 10
-    info_bot = draw_order_info(c, F, FB, order, RDZ_TOP, zx, zw)
-    grid_bot = draw_grid(c, F, FB, order, info_bot - GAP, zx, zw)
-    draw_amount(c, F, FB, order, grid_bot - GAP, zx, zw)
+
+    # V4.1.1 版面：上方左半 70% 放訂單編號/商品表/贈品欄;
+    # 金額表 + VIP 框移到頁面下方全寬(右側上半留白)。
+    zw_left = zw * 0.70
+
+    # 左半 70%:訂單編號 → 商品表 → 贈品欄
+    info_bot = draw_order_info(c, F, FB, order, RDZ_TOP, zx, zw_left)
+    grid_bot = draw_grid(c, F, FB, order, info_bot - GAP, zx, zw_left)
+    gift_bot = draw_gift_section(c, F, FB, order, grid_bot - GAP, zx, zw_left)
+
+    # 下方全寬:金額表 + VIP 整合框(VIP 框底邊釘在頁面最下方,金額表往上堆疊)
+    draw_amount(c, F, FB, order, RDZ_BOTTOM + 2, zx, zw)
+
+    # 右上角紙箱(預留位置不動)
+    draw_box_type_section(c, F, FB, order)
 
     c.showPage()
     c.save()

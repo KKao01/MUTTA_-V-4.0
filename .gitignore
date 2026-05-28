@@ -16,3 +16,4 @@ Thumbs.db
 # 編輯器
 .vscode/
 .idea/
+.claude/
