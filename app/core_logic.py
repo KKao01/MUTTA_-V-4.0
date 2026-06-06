@@ -222,6 +222,9 @@ def parse_excel(path: str) -> list:
             continue
 
         spec_raw = str(col('商品規格', row)).strip()
+        product_name = str(col('商品名稱', row)).strip()
+        if product_name in ('None', ''):
+            product_name = ''
         qty_raw  = col('數量', row)
         try:
             qty = max(1, int(float(str(qty_raw)))) if qty_raw != '' else 1
@@ -311,7 +314,8 @@ def parse_excel(path: str) -> list:
                 order_data[oid]['remark'] = remark
 
         if spec_raw and spec_raw not in ('None', ''):
-            order_data[oid]['items'].append({'spec': spec_raw, 'qty': qty})
+            order_data[oid]['items'].append(
+                {'spec': spec_raw, 'qty': qty, 'name': product_name})
             for _ in range(qty):
                 order_data[oid]['specs'].append(spec_raw)
 

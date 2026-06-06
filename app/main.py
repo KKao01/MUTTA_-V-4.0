@@ -234,6 +234,7 @@ async def upload_files(
     excel_files: list[UploadFile]      = File(...),
     csv_files:   list[UploadFile]|None = File(None),
     shipper:     str                   = Form("seven"),
+    show_details: bool                 = Form(True),
 ):
     if shipper not in ("seven", "sf"):
         raise HTTPException(400, f"未知的物流類型：{shipper}")
@@ -302,6 +303,7 @@ async def upload_files(
     job_store[job_id] = {
         "status":      "uploaded",
         "shipper":     shipper,
+        "show_details": show_details,
         "pdf_name":    pdf_name,
         "excel_name":  excel_name,
         "csv_name":    csv_name,
@@ -484,6 +486,29 @@ def _build_v4_qty(items: list, spec_map: dict) -> dict:
     return qty
 
 
+def _build_item_details(items: list, spec_map: dict) -> list:
+    """為每個品項展開出分類明細 cats=[[child, count], ...]，與左邊商品表同一套分類；
+    供右半品項明細框的下半(B)顯示。未對應 spec_map 者 cats 為空(由引擎 fallback 原始規格)。"""
+    out = []
+    for it in items:
+        info = spec_map.get(it.get("spec", ""))
+        agg, order = {}, []
+        if info:
+            for cond in (info if isinstance(info, list) else [info]):
+                child = cond.get("child", "")
+                if not child:
+                    continue
+                cnt = cond.get("qty", 1) * it.get("qty", 1)
+                if child in agg:
+                    agg[child] += cnt
+                else:
+                    agg[child] = cnt; order.append(child)
+        cats = [[ch, agg[ch]] for ch in order]
+        out.append({"name": it.get("name", ""), "spec": it.get("spec", ""),
+                    "qty": it.get("qty", 1), "cats": cats})
+    return out
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  7-11 流程（V4 + 撕線區擷取）
 # ══════════════════════════════════════════════════════════════════════════════
@@ -602,6 +627,8 @@ async def _run_job_seven(job_id: str):
 
         # 7. 排序、組合 V4 dict、輸出 PDF
         sorted_labels, v4_orders = _build_v4_orders(orders, cfg, pdf_info, pdf_paths)
+        for _o in v4_orders:
+            _o["show_details"] = job.get("show_details", True)
         job["progress"] = 75
 
         log("輸出 V4 分類 PDF...")
@@ -760,6 +787,8 @@ async def _run_job_sf(job_id: str):
         sorted_labels, v4_orders = _build_v4_orders(
             orders, cfg, pdf_info, pdf_paths, csv_data=csv_data
         )
+        for _o in v4_orders:
+            _o["show_details"] = job.get("show_details", True)
         job["progress"] = 75
 
         # 9. 輸出 PDF（用 v4_engine_sf）
@@ -891,6 +920,7 @@ def _build_v4_orders(orders, cfg, pdf_info, pdf_paths, csv_data=None):
             "adjustment":       0,
             "total":            v3o.get("order_total", 0),
             "qty":              _build_v4_qty(v3o.get("items", []), cfg.get("spec_map", {})),
+            "items":            _build_item_details(v3o.get("items", []), cfg.get("spec_map", {})),
             "_cat":             v3o.get("cat", "特殊單"),
             "_page_index":      info.get("page_index", 0),
             "_pdf_path":        info.get("pdf_path", pdf_paths[0] if pdf_paths else ""),

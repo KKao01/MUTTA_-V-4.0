@@ -88,6 +88,8 @@
   input:checked + .slider { background:var(--sf-red); }
   input:checked + .slider:before { transform:translateX(18px); }
   .toggle-label { font-size:13px; font-weight:500; }
+  .print-options { display:flex; justify-content:flex-end; margin-bottom:24px; }
+  .opt-toggle { display:inline-flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
   .gift-badge { font-size:11px; font-weight:600; padding:3px 12px; border-radius:20px; background:#fee2e2; color:var(--sf-red); transition:all .3s; }
 
   /* Progress */
@@ -251,6 +253,17 @@
       <input type="file" id="input-csv" accept=".csv" multiple onchange="onFile('csv',this)">
       <div class="file-list" id="list-csv"></div>
     </div>
+  </div>
+
+  <!-- 列印選項 -->
+  <div class="print-options">
+    <label class="opt-toggle" title="關閉則出貨單右側不印品項明細清單">
+      <span class="toggle">
+        <input type="checkbox" id="opt-show-details" checked>
+        <span class="slider"></span>
+      </span>
+      <span class="toggle-label">列印今日製作明細清單</span>
+    </label>
   </div>
 
   <!-- Progress -->
@@ -500,6 +513,8 @@ async function startProcess() {
 
   const fd = new FormData();
   fd.append('shipper', shipper);
+  const showDetails = document.getElementById('opt-show-details')?.checked !== false;
+  fd.append('show_details', showDetails ? 'true' : 'false');
   files.pdf.forEach(f => fd.append('pdf_files', f));
   files.excel.forEach(f => fd.append('excel_files', f));
   if (shipper === 'sf' && files.csv) {

@@ -520,6 +520,140 @@ def draw_amount(c, F, FB, order, bottom_y, zx, zw):
     if cnt and cnt > 0:
         txt(c, f"已購買次數 {cnt}", right_head_x, line2_y, FB, line_size)
 
+    return top_y   # 金額表頂端 y(供右半品項明細框的底部基準)
+
+# ─────────────────────────────────────────
+# 2.2.4 右半品項明細框（V4.2 新增）
+# 規格：
+#   - 位置：靠右(右界對齊頁框)、左界避開撕線條碼圖(TEAR_X1 右側)
+#   - 由下往上堆疊：第 1 項貼金額表上方，第 2 項在其上，依此類推
+#   - 一品項一框，框內上半=商品名稱(A，換行+限高截斷)、
+#     下半=分類代碼明細(B，與左邊商品表同套:痘乳×1 / 綠×2 橘×2…，可換行)
+#   - 框高依內容自適應；品項太多塞不下時整體縮小字級(到下限再截斷)
+# ─────────────────────────────────────────
+def draw_product_details(c, F, FB, order, top_limit, bottom_limit):
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    items = order.get('items') or []
+    if not items:
+        return
+
+    RX1 = RDZ_X1
+    RX0 = TEAR_X1 + 6                 # 靠右、避開撕線條碼圖
+    RW  = RX1 - RX0
+    PAD_X   = 7
+    inner_w = RW - 2 * PAD_X
+    GAP_V   = 7
+    available = top_limit - bottom_limit
+    n = len(items)
+    if available <= 0 or inner_w <= 0:
+        return
+
+    MAX_NAME_LINES = 4
+    MAX_SPEC_LINES = 3
+    TOKEN_GAP = 8
+
+    def wrap_cjk(s, font, fs, max_w):
+        lines, cur = [], ''
+        for ch in str(s):
+            if ch == '\n':
+                lines.append(cur); cur = ''; continue
+            if stringWidth(cur + ch, font, fs) <= max_w or not cur:
+                cur += ch
+            else:
+                lines.append(cur); cur = ch
+        if cur:
+            lines.append(cur)
+        return lines or ['']
+
+    def ellipsize(s, font, fs, max_w):
+        if stringWidth(s + '…', font, fs) <= max_w:
+            return s + '…'
+        while s and stringWidth(s + '…', font, fs) > max_w:
+            s = s[:-1]
+        return s + '…'
+
+    def wrap_tokens(tokens, font, fs, max_w):
+        """逐 token 打包成多行(不切斷 token)。回傳 list[list[token]]。"""
+        lines, cur, cur_w = [], [], 0
+        for tk in tokens:
+            tw = stringWidth(tk, font, fs)
+            add = tw if not cur else TOKEN_GAP + tw
+            if cur and cur_w + add > max_w:
+                lines.append(cur); cur, cur_w = [tk], tw
+            else:
+                cur.append(tk); cur_w += add
+        if cur:
+            lines.append(cur)
+        return lines or [['—']]
+
+    def item_tokens(it):
+        """B 格內容：優先用分類代碼(與左表同套);無對應則 fallback 原始規格。"""
+        cats = it.get('cats') or []
+        if cats:
+            return [f"{ch}×{cnt}" for ch, cnt in cats], FB, False
+        raw = str(it.get('spec', '') or '').strip() or '—'
+        return [raw], F, True
+
+    def build(name_fs, spec_fs):
+        name_lh, spec_lh = name_fs + 3, spec_fs + 3
+        layout = []
+        for it in items:
+            name = str(it.get('name', '') or '').strip()
+            nlines = wrap_cjk(name, FB, name_fs, inner_w)
+            if len(nlines) > MAX_NAME_LINES:
+                nlines = nlines[:MAX_NAME_LINES]
+                nlines[-1] = ellipsize(nlines[-1], FB, name_fs, inner_w)
+
+            tokens, sfont, fb = item_tokens(it)
+            if fb and stringWidth(tokens[0], sfont, spec_fs) > inner_w:
+                tokens = [ellipsize(tokens[0], sfont, spec_fs, inner_w)]
+            slines = wrap_tokens(tokens, sfont, spec_fs, inner_w)
+            if len(slines) > MAX_SPEC_LINES:
+                slines = slines[:MAX_SPEC_LINES]
+
+            spec_area_h = len(slines) * spec_lh + 8
+            box_h = 6 + len(nlines) * name_lh + spec_area_h
+            layout.append(dict(name_fs=name_fs, spec_fs=spec_fs,
+                               name_lh=name_lh, spec_lh=spec_lh,
+                               spec_area_h=spec_area_h, nlines=nlines,
+                               slines=slines, sfont=sfont, box_h=box_h))
+        total = sum(L['box_h'] for L in layout) + (n - 1) * GAP_V
+        return layout, total
+
+    name_fs, spec_fs = 12.0, 11.0
+    layout, total = build(name_fs, spec_fs)
+    while total > available and name_fs > 7.0:
+        name_fs -= 0.5; spec_fs = max(8.0, spec_fs - 0.5)
+        layout, total = build(name_fs, spec_fs)
+
+    by = bottom_limit
+    for L in layout:
+        h = L['box_h']
+        rect_out(c, RX0, by, RW, h, lw=0.8)
+
+        # 下半(B)：分類代碼明細(與左邊商品表同一套)
+        spec_area_h = L['spec_area_h']
+        div_y = by + spec_area_h
+        hline(c, RX0, RX1, div_y, w=0.5, col=BW_GRAY_LT)
+        sfs, slh, sfont = L['spec_fs'], L['spec_lh'], L['sfont']
+        sy = div_y - 4 - sfs
+        for line in L['slines']:
+            x = RX0 + PAD_X
+            for tk in line:
+                txt(c, tk, x, sy, sfont, sfs)
+                x += stringWidth(tk, sfont, sfs) + TOKEN_GAP
+            sy -= slh
+
+        # 上半(A)：商品名稱（由上往下）
+        nfs, nlh = L['name_fs'], L['name_lh']
+        ny = by + h - 4 - nfs
+        for ln in L['nlines']:
+            txt(c, ln, RX0 + PAD_X, ny, FB, nfs)
+            ny -= nlh
+
+        by += h + GAP_V
+
 # ─────────────────────────────────────────
 # 主繪製
 # ─────────────────────────────────────────
@@ -551,7 +685,12 @@ def generate_page(pdf_path, page_index, order, output_path):
     gift_bot = draw_gift_section(c, F, FB, order, grid_bot - GAP, zx, zw_left)
 
     # 下方全寬:金額表 + VIP 整合框(VIP 框底邊釘在頁面最下方,金額表往上堆疊)
-    draw_amount(c, F, FB, order, RDZ_BOTTOM + 2, zx, zw)
+    amount_top = draw_amount(c, F, FB, order, RDZ_BOTTOM + 2, zx, zw)
+
+    # 右半品項明細框:靠右、由金額表上方往上堆到紙張頂端(前端開關控制)
+    if order.get('show_details', True):
+        draw_product_details(c, F, FB, order,
+                             top_limit=TEAR_RL_TOP, bottom_limit=amount_top + 6)
 
     # 右上角紙箱(預留位置不動)
     draw_box_type_section(c, F, FB, order)

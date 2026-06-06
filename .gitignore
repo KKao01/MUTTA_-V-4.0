@@ -2,6 +2,9 @@
 purchase_history/
 config.json
 
+# 本地溝通/測試素材（含真實客戶資料，不上 GitHub）
+LOOK/
+
 # 暫存
 uploads/
 
