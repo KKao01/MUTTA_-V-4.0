@@ -1172,26 +1172,36 @@ async def parse_product_excel(
                 return str(v).strip() if v and str(v).strip() not in ("None","nan","NaN","") else ""
             except (ValueError, IndexError): return ""
         cfg = load_config(); existing = cfg.get("spec_map", {})
-        results = []; seen = set()
-        for row in rows[1:]:
+        results = []; seen = {}; skipped = []
+        for ridx, row in enumerate(rows[1:], start=2):   # ridx = Excel 實際列號（標題=1）
             product_name = get_col("商品名稱", row)
-            if not product_name: continue
+            if not product_name:
+                skipped.append({"row": ridx, "name": "", "type": "no_name", "reason": "商品名稱空白"})
+                continue
             p=get_col("品項一",row); q=get_col("品項二",row)
-            r=get_col("組合擇一",row); s=get_col("品項",row); t=get_col("商品",row)
+            r=get_col("組合擇一",row); u=get_col("組合",row)
+            s=get_col("品項",row);   t=get_col("商品",row)
             if p and q: spec_key = f"{p}/{q}"
             elif r: spec_key = r
+            elif u: spec_key = u                  # 套組商品的規格填在「組合」欄（原本漏讀）
             elif s: spec_key = s
             elif t: spec_key = t
-            else: continue
-            if spec_key in seen: continue
-            seen.add(spec_key)
+            else:
+                skipped.append({"row": ridx, "name": product_name, "type": "no_spec", "reason": "無規格欄位（品項一/二、組合擇一、組合、品項、商品 皆空白）"})
+                continue
+            if spec_key in seen:
+                skipped.append({"row": ridx, "name": product_name, "type": "duplicate",
+                                "reason": f"規格「{spec_key}」與第 {seen[spec_key]} 列重複"})
+                continue
+            seen[spec_key] = ridx
             ex_raw = existing.get(spec_key)
             ex = (ex_raw[0] if isinstance(ex_raw,list) and ex_raw
                   else ex_raw if isinstance(ex_raw,dict) else {})
             results.append({"spec":spec_key,"product_name":product_name,
                             "parent":ex.get("parent",""),"child":ex.get("child",""),
                             "qty":ex.get("qty",1),"is_new":spec_key not in existing})
-        return {"rows": results, "total": len(results)}
+        return {"rows": results, "total": len(results),
+                "row_count": len(rows) - 1, "skipped": skipped}
     except HTTPException: raise
     except Exception as e: raise HTTPException(500, f"解析失敗：{e}")
 

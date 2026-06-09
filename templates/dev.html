@@ -314,6 +314,7 @@ select.form-control { cursor: pointer; }
 #toast.show { transform: translateY(0); opacity: 1; }
 #toast.ok { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
 #toast.err { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+#toast.warn { background: rgba(250,204,21,0.12); color: var(--yellow); border: 1px solid rgba(250,204,21,0.3); }
 
 /* ── 頁面顯示控制 ── */
 .page { display: none; }
@@ -1025,10 +1026,29 @@ async function parseProductExcel(input) {
     });
     renderSpecList();
     const sum = document.getElementById('spec-summary');
-    const newCount = specRows.filter(r => r.is_new).length;
+    const skipped  = data.skipped || [];
+    const dupCount   = skipped.filter(s => s.type === 'duplicate').length;
+    const otherCount = skipped.length - dupCount;          // 商品名稱空白 / 無規格欄位
+    const newCount   = specRows.filter(r => r.is_new).length;   // 尚未設定
+    const setCount   = data.total - newCount;                   // 已設定
+    const totalRows  = (data.row_count != null) ? data.row_count : data.total;
     sum.style.display = 'block';
-    sum.innerHTML = `共 <b>${data.total}</b> 筆規格，其中 <span style="color:var(--green)">${data.total - newCount} 筆已設定</span>，<span style="color:var(--yellow)">${newCount} 筆尚未設定</span>`;
-    toast('解析完成', 'ok');
+    // 共 N 筆規格，X 筆重複，[M 筆無法匯入，]其中 A 筆已設定，B 筆尚未設定
+    let html = `共 <b>${totalRows}</b> 筆規格`;
+    if (dupCount)   html += `，<span style="color:#e55">${dupCount} 筆重複</span>`;
+    if (otherCount) html += `，<span style="color:#e55">${otherCount} 筆無法匯入</span>`;
+    html += `，其中 <span style="color:var(--green)">${setCount} 筆已設定</span>`
+          + `，<span style="color:var(--yellow)">${newCount} 筆尚未設定</span>`;
+    if (skipped.length) {
+      html += `<ul style="margin:4px 0 0 18px;padding:0;font-size:12px;color:#888">`;
+      skipped.forEach(s => {
+        html += `<li>第 ${s.row} 列：${s.reason}${s.name ? '（' + s.name + '）' : ''}</li>`;
+      });
+      html += `</ul>`;
+    }
+    sum.innerHTML = html;
+    toast(skipped.length ? `解析完成，${skipped.length} 列未匯入` : '解析完成',
+          skipped.length ? 'warn' : 'ok');
   } catch(e) { toast('解析失敗：' + e.message, 'err'); }
   input.value = '';
 }
