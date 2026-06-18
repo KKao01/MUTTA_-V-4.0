@@ -39,6 +39,7 @@ DEFAULT_CONFIG = {
     "categories": {},
     "spec_map": {},
     "classification_rules": {},
+    "classification_boxes": {},      # V4.1.2：分類名稱 → 箱型（用於出貨單右上角列印 + 排序）
     "gift_rules": {},                # V4.1 起不再從 dev 後台 UI 維護（API 仍保留）
     "discount_excludes": [50, 120, 170],
     "discount_threshold": 157,
@@ -235,6 +236,7 @@ async def upload_files(
     csv_files:   list[UploadFile]|None = File(None),
     shipper:     str                   = Form("seven"),
     show_details: bool                 = Form(True),
+    print_box:   bool                  = Form(True),
 ):
     if shipper not in ("seven", "sf"):
         raise HTTPException(400, f"未知的物流類型：{shipper}")
@@ -304,6 +306,7 @@ async def upload_files(
         "status":      "uploaded",
         "shipper":     shipper,
         "show_details": show_details,
+        "print_box":   print_box,
         "pdf_name":    pdf_name,
         "excel_name":  excel_name,
         "csv_name":    csv_name,
@@ -629,6 +632,7 @@ async def _run_job_seven(job_id: str):
         sorted_labels, v4_orders = _build_v4_orders(orders, cfg, pdf_info, pdf_paths)
         for _o in v4_orders:
             _o["show_details"] = job.get("show_details", True)
+            _o["print_box"]    = job.get("print_box", True)
         job["progress"] = 75
 
         log("輸出 V4 分類 PDF...")
@@ -789,6 +793,7 @@ async def _run_job_sf(job_id: str):
         )
         for _o in v4_orders:
             _o["show_details"] = job.get("show_details", True)
+            _o["print_box"]    = job.get("print_box", True)
         job["progress"] = 75
 
         # 9. 輸出 PDF（用 v4_engine_sf）
@@ -859,11 +864,16 @@ def _build_v4_orders(orders, cfg, pdf_info, pdf_paths, csv_data=None):
     TAIL_ORDER = {cl.DISCOUNT_CAT: 1, cl.REMARK_CAT: 2, cl.SPECIAL_CAT: 3}
     gift_rules = cfg.get("gift_rules", {})
     box_types  = cfg.get("box_types", [])
+    cls_boxes  = cfg.get("classification_boxes", {})
+
+    def _box_of(label):
+        """分類 → 箱型：優先讀 classification_boxes，回退舊的 gift_rules[*].box"""
+        return (cls_boxes.get(label) or gift_rules.get(label, {}).get("box", "")).strip()
 
     def _sort_key(label):
         if label in TAIL_ORDER:
             return (1, TAIL_ORDER[label], 0, label)
-        box_val = gift_rules.get(label, {}).get("box", "")
+        box_val = _box_of(label)
         box_idx = box_types.index(box_val) if (box_types and box_val in box_types) else 9999
         return (0, 0, box_idx, label)
 
@@ -921,6 +931,7 @@ def _build_v4_orders(orders, cfg, pdf_info, pdf_paths, csv_data=None):
             "total":            v3o.get("order_total", 0),
             "qty":              _build_v4_qty(v3o.get("items", []), cfg.get("spec_map", {})),
             "items":            _build_item_details(v3o.get("items", []), cfg.get("spec_map", {})),
+            "box_type":         _box_of(v3o.get("cat", "")),
             "_cat":             v3o.get("cat", "特殊單"),
             "_page_index":      info.get("page_index", 0),
             "_pdf_path":        info.get("pdf_path", pdf_paths[0] if pdf_paths else ""),
@@ -1179,15 +1190,16 @@ async def parse_product_excel(
                 skipped.append({"row": ridx, "name": "", "type": "no_name", "reason": "商品名稱空白"})
                 continue
             p=get_col("品項一",row); q=get_col("品項二",row)
-            r=get_col("組合擇一",row); u=get_col("組合",row)
+            r=get_col("組合擇一",row) or get_col("組合選一",row)
+            u=get_col("組合",row)
             s=get_col("品項",row);   t=get_col("商品",row)
             if p and q: spec_key = f"{p}/{q}"
-            elif r: spec_key = r
+            elif r: spec_key = r                  # 組合擇一 / 組合選一（不同匯出版本欄名）
             elif u: spec_key = u                  # 套組商品的規格填在「組合」欄（原本漏讀）
             elif s: spec_key = s
             elif t: spec_key = t
             else:
-                skipped.append({"row": ridx, "name": product_name, "type": "no_spec", "reason": "無規格欄位（品項一/二、組合擇一、組合、品項、商品 皆空白）"})
+                skipped.append({"row": ridx, "name": product_name, "type": "no_spec", "reason": "無規格欄位（品項一/二、組合擇一、組合選一、組合、品項、商品 皆空白）"})
                 continue
             if spec_key in seen:
                 skipped.append({"row": ridx, "name": product_name, "type": "duplicate",
@@ -1213,6 +1225,25 @@ async def get_classification_rules(request: Request, _=Depends(require_dev_token
 async def save_classification_rules(request: Request, _=Depends(require_dev_token)):
     body = await request.json()
     cfg = load_config(); cfg["classification_rules"] = body; save_config(cfg)
+    return {"ok": True}
+
+@app.get("/api/dev/classification-boxes")
+async def get_classification_boxes(request: Request, _=Depends(require_dev_token)):
+    """分類名稱 → 箱型。回傳時補上舊資料來源（gift_rules[*].box）作為預設值。"""
+    cfg = load_config()
+    boxes = dict(cfg.get("classification_boxes", {}))
+    gift_rules = cfg.get("gift_rules", {})
+    for cat in cfg.get("classification_rules", {}):
+        if not boxes.get(cat):
+            legacy = (gift_rules.get(cat, {}) or {}).get("box", "")
+            if legacy: boxes[cat] = legacy
+    return boxes
+
+@app.post("/api/dev/classification-boxes")
+async def save_classification_boxes(request: Request, _=Depends(require_dev_token)):
+    body = await request.json()
+    cleaned = {str(k): str(v).strip() for k, v in (body or {}).items() if str(v).strip()}
+    cfg = load_config(); cfg["classification_boxes"] = cleaned; save_config(cfg)
     return {"ok": True}
 
 @app.get("/api/dev/gift-rules")
@@ -1323,6 +1354,7 @@ async def export_config(request: Request, _=Depends(require_dev_token)):
         "categories":           cfg.get("categories",           {}),
         "spec_map":             cfg.get("spec_map",             {}),
         "classification_rules": cfg.get("classification_rules", {}),
+        "classification_boxes": cfg.get("classification_boxes", {}),
         "gift_rules":           cfg.get("gift_rules",           {}),
         "discount_excludes":    cfg.get("discount_excludes",    []),
         "discount_threshold":   cfg.get("discount_threshold",   157),
@@ -1346,7 +1378,7 @@ async def import_config(request: Request, file: UploadFile = File(...), _=Depend
         raw = await file.read(); data = json.loads(raw.decode("utf-8"))
     except Exception: raise HTTPException(400, "JSON 格式錯誤")
     cfg = load_config()
-    for key in ("categories","spec_map","classification_rules","gift_rules",
+    for key in ("categories","spec_map","classification_rules","classification_boxes","gift_rules",
                 "discount_excludes","discount_threshold","discount_min_count",
                 "avg_price_threshold","remark_excludes","box_types","sf_fixed"):
         if key in data: cfg[key] = data[key]

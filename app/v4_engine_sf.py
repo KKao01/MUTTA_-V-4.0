@@ -288,21 +288,27 @@ def draw_order_info(c, F, FB, order, top_y, zx, zw):
     return rem_y - rem_h   # 固定返回同樣底部位置
 
 # ─────────────────────────────────────────
-# 2.2.0.5 紙箱欄位（V4.1 預留）
-# 位置：右上角，QR 碼右側
-# 規格：資料來源待接（目前只畫格式，內容從 order.get('box_type') 來）
-#       順豐版上半部留白、無撕線區，位置先 hardcode 與 7-11 相同，待資料接上再微調
+# 2.2.0.5 紙箱欄位（V4.1.2 正式接資料）
+# 位置：右上角，與 7-11 版大 QR 同高（順豐版上半部留白、無撕線區，位置一致）
+# 規格：直接印箱型文字（無標題），字級比照中間「取件門市」
+#       由分類規則的箱型對照 → order['box_type']；列印開關 order['print_box']
 # ─────────────────────────────────────────
+BOX_CX     = 515          # 撕線區右側留白的水平中心（x 434.4~595）
+BOX_BASE_Y = A4_H - 111   # 與 7-11 版大 QR 同高（reportlab 由下而上 = 731）
+BOX_SZ     = 28           # 字級（比照「取件門市」門市名）
+
+def _box_label(order):
+    """要列印的箱型文字（空字串代表不印）。"""
+    if not order.get('print_box', True):
+        return ''
+    return (order.get('box_type') or '').strip()
+
 def draw_box_type_section(c, F, FB, order):
-    """右上角紙箱顯示。資料未接時不畫任何東西。"""
-    box_type = (order.get('box_type') or '').strip()
-    if not box_type:
-        return  # 暫未接資料，不畫
-    # 位置常數（等接資料時再微調）
-    BOX_X = 470
-    BOX_Y = A4_H - 200    # 撕線區右側
-    txt(c, "紙箱:", BOX_X, BOX_Y, F, 11)
-    txt(c, box_type, BOX_X, BOX_Y - 22, FB, 18)
+    """右上角紙箱顯示：與 QR 同高、置中於右側留白。"""
+    label = _box_label(order)
+    if not label:
+        return
+    txt(c, label, BOX_CX, BOX_BASE_Y, FB, BOX_SZ, align="center")
 
 # ─────────────────────────────────────────
 # 2.2.2 商品格子 + 贈品區
@@ -677,13 +683,14 @@ def generate_page(pdf_path, page_index, order, output_path):
     # 下方全寬:金額表 + VIP 整合框(VIP 框底邊釘在頁面最下方,金額表往上堆疊)
     amount_top = draw_amount(c, F, FB, order, RDZ_BOTTOM + 2, zx, zw)
 
-    # 右半品項明細框:靠右、由金額表上方往上堆到紙張頂端(前端開關控制,與 7-11 版一致)
+    # 右上角紙箱(與 7-11 版 QR 同高)。有印箱型時，品項明細框頂端讓位到箱型下方避免重疊。
+    draw_box_type_section(c, F, FB, order)
+    det_top = (BOX_BASE_Y - 14) if _box_label(order) else TEAR_RL_TOP
+
+    # 右半品項明細框:靠右、由金額表上方往上堆到 det_top(前端開關控制,與 7-11 版一致)
     if order.get('show_details', True):
         draw_product_details(c, F, FB, order,
-                             top_limit=TEAR_RL_TOP, bottom_limit=amount_top + 6)
-
-    # 右上角紙箱(預留位置不動)
-    draw_box_type_section(c, F, FB, order)
+                             top_limit=det_top, bottom_limit=amount_top + 6)
 
     c.showPage()
     c.save()

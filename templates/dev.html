@@ -476,7 +476,8 @@ select.form-control { cursor: pointer; }
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th style="width:25%">分類名稱</th>
+            <th style="width:22%">分類名稱</th>
+            <th style="width:120px">箱型</th>
             <th>條件</th>
             <th style="width:100px"></th>
           </tr></thead>
@@ -726,6 +727,12 @@ select.form-control { cursor: pointer; }
       <label class="form-label">分類名稱</label>
       <input class="form-control" id="new-rule-name" placeholder="例：粉+橘（一大一小高）">
     </div>
+    <div class="form-group">
+      <label class="form-label">箱型（出貨單右上角列印）</label>
+      <select class="form-control" id="new-rule-box">
+        <option value="">-- 不指定箱型 --</option>
+      </select>
+    </div>
     <div class="form-label" style="margin-bottom:8px">條件（整張訂單必須完全符合所有條件）</div>
     <div id="new-rule-conditions"></div>
     <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="addRuleCondition()">+ 新增條件行</button>
@@ -763,7 +770,7 @@ select.form-control { cursor: pointer; }
 //  狀態
 // ══════════════════════════════════════════════════════════
 let TOKEN = '';
-let categories = {}, specRows = [], rules = {}, boxTypes = [];
+let categories = {}, specRows = [], rules = {}, boxTypes = [], ruleBoxes = {};
 
 // ══════════════════════════════════════════════════════════
 //  明暗切換
@@ -870,17 +877,19 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
 //  載入所有設定
 // ══════════════════════════════════════════════════════════
 async function loadAll() {
-  const [cfg, sm, r, bt, gb, gdm] = await Promise.all([
+  const [cfg, sm, r, bt, gb, gdm, rb] = await Promise.all([
     api('GET', '/api/dev/config'),
     api('GET', '/api/dev/spec-map'),
     api('GET', '/api/dev/classification-rules'),
     api('GET', '/api/dev/box-types'),
     api('GET', '/api/dev/gift-builder-config'),
     api('GET', '/api/dev/gift-display-map'),
+    api('GET', '/api/dev/classification-boxes'),
   ]);
   categories = cfg.categories || {};
   rules = r || {};
   boxTypes = bt || [];
+  ruleBoxes = rb || {};
   giftBuilderCfg = gb || {};
   giftDisplayMap = gdm.display_map || {};
   giftFixedSuffix = gdm.fixed_suffix || '';
@@ -1258,8 +1267,13 @@ function renderRules() {
         ${c.parent}${c.child ? ' › ' + c.child : '（任意子）'} × ${c.qty}
       </span>`
     ).join('');
+    const box = ruleBoxes[cat] || '';
+    const boxCell = box
+      ? `<span class="box-tag" style="margin:0">📦 ${box}</span>`
+      : `<span style="color:var(--text3);font-size:11px">—</span>`;
     return `<tr>
       <td><b>${cat}</b></td>
+      <td>${boxCell}</td>
       <td>${conds}</td>
       <td>
         <div style="display:flex;gap:4px">
@@ -1281,6 +1295,12 @@ function showAddRuleModal(editCat = null) {
   container.innerHTML = '';
   document.getElementById('new-rule-name').value = editCat || '';
   document.getElementById('modal-rule-title').textContent = editCat ? '編輯分類規則' : '新增分類規則';
+
+  // 箱型下拉（選項來自箱型管理）
+  const curBox = editCat ? (ruleBoxes[editCat] || '') : '';
+  document.getElementById('new-rule-box').innerHTML =
+    `<option value="">-- 不指定箱型 --</option>` +
+    boxTypes.map(b => `<option value="${b}" ${b===curBox?'selected':''}>${b}</option>`).join('');
 
   if (editCat && rules[editCat]) {
     rules[editCat].forEach(cond => addRuleCondition(cond));
@@ -1335,8 +1355,13 @@ function confirmAddRule() {
     conditions.push({ parent, child, qty });
   }
   if (!conditions.length) { toast('請至少新增一個條件', 'err'); return; }
-  if (_editingRule && _editingRule !== cat) delete rules[_editingRule];
+  const box = document.getElementById('new-rule-box').value;
+  if (_editingRule && _editingRule !== cat) {
+    delete rules[_editingRule];
+    delete ruleBoxes[_editingRule];
+  }
   rules[cat] = conditions;
+  if (box) ruleBoxes[cat] = box; else delete ruleBoxes[cat];
   renderRules();
   closeModal('modal-add-rule');
   _editingRule = null;
@@ -1345,12 +1370,14 @@ function confirmAddRule() {
 function deleteRule(cat) {
   if (!confirm(`確定刪除分類規則「${cat}」？`)) return;
   delete rules[cat];
+  delete ruleBoxes[cat];
   renderRules();
 }
 
 async function saveRules() {
   try {
     await api('POST', '/api/dev/classification-rules', rules);
+    await api('POST', '/api/dev/classification-boxes', ruleBoxes);
     toast('分類規則儲存完成', 'ok');
   } catch(e) { toast('儲存失敗：' + e.message, 'err'); }
 }
