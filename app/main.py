@@ -474,11 +474,14 @@ def _normalize_vip(raw: str) -> str:
 
 
 def _build_v4_qty(items: list, spec_map: dict) -> dict:
+    import core_logic as cl
     V4_KEYS = ["C","F","C潤","F潤","抗痘沐","水光沐",
                "橘","綠","痘乳","白乳","早C","晚A"]
     qty = {k: 0 for k in V4_KEYS}
+    # 全形 Ｘ / 半形 X 規格寬度不一致時也能對上 spec_map（與 core_logic 同一套正規化）
+    nmap = {cl._norm_spec(k): v for k, v in spec_map.items()}
     for it in items:
-        info = spec_map.get(it.get("spec", ""))
+        info = nmap.get(cl._norm_spec(it.get("spec", "")))
         if not info: continue
         for cond in (info if isinstance(info, list) else [info]):
             child = cond.get("child", "")
@@ -490,9 +493,11 @@ def _build_v4_qty(items: list, spec_map: dict) -> dict:
 def _build_item_details(items: list, spec_map: dict) -> list:
     """為每個品項展開出分類明細 cats=[[child, count], ...]，與左邊商品表同一套分類；
     供右半品項明細框的下半(B)顯示。未對應 spec_map 者 cats 為空(由引擎 fallback 原始規格)。"""
+    import core_logic as cl
+    nmap = {cl._norm_spec(k): v for k, v in spec_map.items()}
     out = []
     for it in items:
-        info = spec_map.get(it.get("spec", ""))
+        info = nmap.get(cl._norm_spec(it.get("spec", "")))
         agg, order = {}, []
         if info:
             for cond in (info if isinstance(info, list) else [info]):

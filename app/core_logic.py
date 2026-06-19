@@ -82,9 +82,19 @@ _SUMMARY_ORDER: list[list[str]] = [
 ]
 
 
+def _norm_spec(s: str) -> str:
+    """規格字串正規化：全形 Ｘ/ｘ → 半形 X/x。
+
+    spec_map 的 key 與訂單實際規格可能一邊用全形「Ｘ」一邊用半形「X」
+    （例：spec_map「夜間小橘Ｘ6」vs 訂單「夜間小橘X6」），寬度不一致會
+    導致 _SPEC_MAP.get() 對不上。注入與查詢都先正規化即可一致比對。
+    """
+    return (s or '').replace('Ｘ', 'X').replace('ｘ', 'x')
+
+
 def inject_spec_map(sm: dict):
     global _SPEC_MAP
-    _SPEC_MAP = sm or {}
+    _SPEC_MAP = {_norm_spec(k): v for k, v in (sm or {}).items()}
 
 
 def inject_classification_rules(rules: dict):
@@ -331,7 +341,7 @@ def parse_excel(path: str) -> list:
         for it in data.get('items', []):
             spec     = it.get('spec', '')
             row_qty  = it.get('qty', 1)
-            info     = _SPEC_MAP.get(spec)
+            info     = _SPEC_MAP.get(_norm_spec(spec))
             if info:
                 conds    = info if isinstance(info, list) else [info]
                 unit     = sum(c.get('qty', 1) for c in conds)
@@ -404,7 +414,7 @@ def classify_order(order: dict) -> tuple:
     for item in items:
         spec = item['spec']
         qty  = item.get('qty', 1)
-        info = _SPEC_MAP.get(spec)
+        info = _SPEC_MAP.get(_norm_spec(spec))
         if not info:
             return '特殊單', True, is_tail
         conds = info if isinstance(info, list) else [info]
@@ -1263,7 +1273,7 @@ def _build_summary_lines(order: dict, max_pt_w: float = 328.9, dpi: int = 150) -
     for item in order.get('items', []):
         spec = item.get('spec', '')
         qty  = item.get('qty', 1)
-        info = _SPEC_MAP.get(spec)
+        info = _SPEC_MAP.get(_norm_spec(spec))
         if not info:
             continue
         conds = info if isinstance(info, list) else [info]
