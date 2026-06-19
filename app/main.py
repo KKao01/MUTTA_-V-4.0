@@ -236,7 +236,6 @@ async def upload_files(
     csv_files:   list[UploadFile]|None = File(None),
     shipper:     str                   = Form("seven"),
     show_details: bool                 = Form(True),
-    print_box:   bool                  = Form(True),
 ):
     if shipper not in ("seven", "sf"):
         raise HTTPException(400, f"未知的物流類型：{shipper}")
@@ -306,7 +305,6 @@ async def upload_files(
         "status":      "uploaded",
         "shipper":     shipper,
         "show_details": show_details,
-        "print_box":   print_box,
         "pdf_name":    pdf_name,
         "excel_name":  excel_name,
         "csv_name":    csv_name,
@@ -632,7 +630,6 @@ async def _run_job_seven(job_id: str):
         sorted_labels, v4_orders = _build_v4_orders(orders, cfg, pdf_info, pdf_paths)
         for _o in v4_orders:
             _o["show_details"] = job.get("show_details", True)
-            _o["print_box"]    = job.get("print_box", True)
         job["progress"] = 75
 
         log("輸出 V4 分類 PDF...")
@@ -793,7 +790,6 @@ async def _run_job_sf(job_id: str):
         )
         for _o in v4_orders:
             _o["show_details"] = job.get("show_details", True)
-            _o["print_box"]    = job.get("print_box", True)
         job["progress"] = 75
 
         # 9. 輸出 PDF（用 v4_engine_sf）
@@ -944,7 +940,18 @@ def _build_v4_orders(orders, cfg, pdf_info, pdf_paths, csv_data=None):
 
 def _generate_v4_pdfs(v4, v4_orders, sorted_labels, tmp_dir):
     """執行 V4 引擎產出每個分類的 PDF"""
+    import codecs
     from pypdf import PdfReader as _PdfReader, PdfWriter as _PdfWriter
+    from pypdf.generic import NameObject, TextStringObject
+
+    def _box_meta(s):
+        # pypdf 的 add_metadata 對中文會寫成「無 BOM 的 UTF-16BE」而無法讀回，
+        # 這裡強制加上 UTF-16BE BOM，確保 MUTTA_GIFT 端能正確解出箱型。
+        t = TextStringObject(s)
+        t.autodetect_utf16 = True
+        t.utf16_bom = codecs.BOM_UTF16_BE
+        return t
+
     pad = len(str(len(sorted_labels)))
     output = []
     global_i = 0
@@ -955,6 +962,10 @@ def _generate_v4_pdfs(v4, v4_orders, sorted_labels, tmp_dir):
         writer     = _PdfWriter()
         safe_label = label.replace("/", "_").replace("\\", "_")
         out_path   = os.path.join(tmp_dir, f"{num:0{pad}d}_{safe_label}.pdf")
+
+        # V4.1.3：箱型不再印在每張標籤、也不寫進檔名（檔名是與 MUTTA_GIFT 的分類握手協定）。
+        # 改寫入 PDF metadata /BoxType，由 MUTTA_GIFT 於最終排序納編後印出。未設定則留空。
+        box_val = (cat_v4[0].get("box_type") or "").strip()
 
         for order in cat_v4:
             global_i += 1
@@ -972,9 +983,12 @@ def _generate_v4_pdfs(v4, v4_orders, sorted_labels, tmp_dir):
             writer.add_page(r.pages[0])
             del r
 
+        if box_val:
+            writer._info.get_object()[NameObject("/BoxType")] = _box_meta(box_val)
+
         with open(out_path, "wb") as fh:
             writer.write(fh)
-        output.append(out_path)
+        output.append((out_path, label))
     return output
 
 
@@ -987,10 +1001,9 @@ def _collect_results(job, job_id, output_files, orders, log):
 
     file_bytes = {}
     results    = []
-    for path in output_files:
+    for path, label in output_files:
         fname = os.path.basename(path)
         file_bytes[fname] = Path(path).read_bytes()
-        label = re.sub(r"^\d+_", "", os.path.splitext(fname)[0])
         cat_ords = groups_by_cat.get(label, [])
         is_sp = cat_ords[0].get("special", False) if cat_ords else False
         results.append({

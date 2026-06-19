@@ -257,13 +257,6 @@
 
   <!-- 列印選項 -->
   <div class="print-options" style="gap:24px">
-    <label class="opt-toggle" title="關閉則出貨單右上角不印箱型">
-      <span class="toggle">
-        <input type="checkbox" id="opt-print-box" checked>
-        <span class="slider"></span>
-      </span>
-      <span class="toggle-label">📦 列印箱型</span>
-    </label>
     <label class="opt-toggle" title="關閉則出貨單右側不印品項明細清單">
       <span class="toggle">
         <input type="checkbox" id="opt-show-details" checked>
@@ -522,8 +515,6 @@ async function startProcess() {
   fd.append('shipper', shipper);
   const showDetails = document.getElementById('opt-show-details')?.checked !== false;
   fd.append('show_details', showDetails ? 'true' : 'false');
-  const printBox = document.getElementById('opt-print-box')?.checked !== false;
-  fd.append('print_box', printBox ? 'true' : 'false');
   files.pdf.forEach(f => fd.append('pdf_files', f));
   files.excel.forEach(f => fd.append('excel_files', f));
   if (shipper === 'sf' && files.csv) {

@@ -694,9 +694,8 @@ def generate_page(pdf_path, page_index, order, output_path):
     # 下方全寬:金額表 + VIP 整合框(VIP 框底邊釘在頁面最下方,金額表往上堆疊)
     amount_top = draw_amount(c, F, FB, order, RDZ_BOTTOM + 2, zx, zw)
 
-    # 右上角紙箱(與大 QR 同高)。有印箱型時，品項明細框頂端讓位到箱型下方避免重疊。
-    draw_box_type_section(c, F, FB, order)
-    det_top = (BOX_BASE_Y - 14) if _box_label(order) else TEAR_RL_TOP
+    # V4.1.3：箱型改附在 PDF 檔名後，不再印在每張標籤上（draw_box_type_section 保留供相容）
+    det_top = TEAR_RL_TOP
 
     # 右半品項明細框:靠右、由金額表上方往上堆到 det_top(前端開關控制)
     if order.get('show_details', True):
