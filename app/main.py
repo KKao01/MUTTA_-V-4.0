@@ -1178,55 +1178,64 @@ async def save_spec_map(request: Request, _=Depends(require_dev_token)):
 
 @app.post("/api/dev/parse-product-excel")
 async def parse_product_excel(
-    request: Request, file: UploadFile = File(...), _=Depends(require_dev_token)
+    request: Request, files: list[UploadFile] = File(...), _=Depends(require_dev_token)
 ):
-    if not file.filename.lower().endswith((".xlsx", ".xls")):
-        raise HTTPException(400, "只接受 .xlsx / .xls 檔案")
+    # V4.1.4：支援一次上傳多個總表 Excel，規格取聯集（跨檔去重）。
+    for f in files:
+        if not f.filename.lower().endswith((".xlsx", ".xls")):
+            raise HTTPException(400, f"只接受 .xlsx / .xls 檔案：{f.filename}")
     try:
         import openpyxl
-        content = await file.read()
-        wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
-        ws = wb.active
-        rows = list(ws.iter_rows(values_only=True))
-        if not rows: raise HTTPException(400, "檔案為空")
-        header = [str(c).strip() if c else "" for c in rows[0]]
-        def get_col(name, row):
-            try:
-                idx = header.index(name); v = row[idx]
-                return str(v).strip() if v and str(v).strip() not in ("None","nan","NaN","") else ""
-            except (ValueError, IndexError): return ""
         cfg = load_config(); existing = cfg.get("spec_map", {})
-        results = []; seen = {}; skipped = []
-        for ridx, row in enumerate(rows[1:], start=2):   # ridx = Excel 實際列號（標題=1）
-            product_name = get_col("商品名稱", row)
-            if not product_name:
-                skipped.append({"row": ridx, "name": "", "type": "no_name", "reason": "商品名稱空白"})
+        results = []; seen = {}; skipped = []; total_rows = 0
+        for f in files:
+            content = await f.read()
+            wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                skipped.append({"row": 0, "name": f.filename, "type": "empty",
+                                "reason": f"檔案為空：{f.filename}"})
                 continue
-            p=get_col("品項一",row); q=get_col("品項二",row)
-            r=get_col("組合擇一",row) or get_col("組合選一",row)
-            u=get_col("組合",row)
-            s=get_col("品項",row);   t=get_col("商品",row)
-            if p and q: spec_key = f"{p}/{q}"
-            elif r: spec_key = r                  # 組合擇一 / 組合選一（不同匯出版本欄名）
-            elif u: spec_key = u                  # 套組商品的規格填在「組合」欄（原本漏讀）
-            elif s: spec_key = s
-            elif t: spec_key = t
-            else:
-                skipped.append({"row": ridx, "name": product_name, "type": "no_spec", "reason": "無規格欄位（品項一/二、組合擇一、組合選一、組合、品項、商品 皆空白）"})
-                continue
-            if spec_key in seen:
-                skipped.append({"row": ridx, "name": product_name, "type": "duplicate",
-                                "reason": f"規格「{spec_key}」與第 {seen[spec_key]} 列重複"})
-                continue
-            seen[spec_key] = ridx
-            ex_raw = existing.get(spec_key)
-            ex = (ex_raw[0] if isinstance(ex_raw,list) and ex_raw
-                  else ex_raw if isinstance(ex_raw,dict) else {})
-            results.append({"spec":spec_key,"product_name":product_name,
-                            "parent":ex.get("parent",""),"child":ex.get("child",""),
-                            "qty":ex.get("qty",1),"is_new":spec_key not in existing})
+            header = [str(c).strip() if c else "" for c in rows[0]]
+            def get_col(name, row, _h=header):
+                try:
+                    idx = _h.index(name); v = row[idx]
+                    return str(v).strip() if v and str(v).strip() not in ("None","nan","NaN","") else ""
+                except (ValueError, IndexError): return ""
+            total_rows += len(rows) - 1
+            for ridx, row in enumerate(rows[1:], start=2):   # ridx = Excel 實際列號（標題=1）
+                product_name = get_col("商品名稱", row)
+                if not product_name:
+                    skipped.append({"row": ridx, "name": "", "type": "no_name",
+                                    "reason": f"[{f.filename}] 商品名稱空白"})
+                    continue
+                p=get_col("品項一",row); q=get_col("品項二",row)
+                r=get_col("組合擇一",row) or get_col("組合選一",row)
+                u=get_col("組合",row)
+                s=get_col("品項",row);   t=get_col("商品",row)
+                if p and q: spec_key = f"{p}/{q}"
+                elif r: spec_key = r                  # 組合擇一 / 組合選一（不同匯出版本欄名）
+                elif u: spec_key = u                  # 套組商品的規格填在「組合」欄（原本漏讀）
+                elif s: spec_key = s
+                elif t: spec_key = t
+                else:
+                    skipped.append({"row": ridx, "name": product_name, "type": "no_spec",
+                                    "reason": f"[{f.filename}] 無規格欄位（品項一/二、組合擇一、組合選一、組合、品項、商品 皆空白）"})
+                    continue
+                if spec_key in seen:
+                    skipped.append({"row": ridx, "name": product_name, "type": "duplicate",
+                                    "reason": f"規格「{spec_key}」重複（已見於 {seen[spec_key]}）"})
+                    continue
+                seen[spec_key] = f"{f.filename} 第{ridx}列"
+                ex_raw = existing.get(spec_key)
+                ex = (ex_raw[0] if isinstance(ex_raw,list) and ex_raw
+                      else ex_raw if isinstance(ex_raw,dict) else {})
+                results.append({"spec":spec_key,"product_name":product_name,
+                                "parent":ex.get("parent",""),"child":ex.get("child",""),
+                                "qty":ex.get("qty",1),"is_new":spec_key not in existing})
         return {"rows": results, "total": len(results),
-                "row_count": len(rows) - 1, "skipped": skipped}
+                "row_count": total_rows, "skipped": skipped}
     except HTTPException: raise
     except Exception as e: raise HTTPException(500, f"解析失敗：{e}")
 

@@ -398,9 +398,14 @@ select.form-control { cursor: pointer; }
       </div>
       <div class="page-actions">
         <button class="btn btn-secondary" onclick="openAddSpecModal()">➕ 新增規格</button>
+        <label title="勾選：匯入後移除「未出現在本次檔案」的舊規格（汰舊）；不勾：保留現有並合併新檔。兩種模式都會自動沿用重疊規格已填的代碼。"
+               style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text2)">
+          <input type="checkbox" id="spec-prune-toggle">
+          <span>汰除未匯入的舊規格</span>
+        </label>
         <label class="btn btn-secondary">
-          📥 匯入總表 Excel
-          <input type="file" accept=".xlsx,.xls" style="display:none" onchange="parseProductExcel(this)">
+          📥 匯入總表 Excel（可多檔）
+          <input type="file" accept=".xlsx,.xls" multiple style="display:none" onchange="parseProductExcel(this)">
         </label>
         <button class="btn btn-primary" onclick="saveSpecMap()">💾 儲存對照</button>
       </div>
@@ -1012,47 +1017,53 @@ function readSpecConditions(ri) {
 }
 
 async function parseProductExcel(input) {
-  const file = input.files[0];
-  if (!file) return;
+  const files = input.files;
+  if (!files || !files.length) return;
   const fd = new FormData();
-  fd.append('file', file);
+  for (const f of files) fd.append('files', f);
+  const replaceMode = document.getElementById('spec-prune-toggle')?.checked;
   try {
     toast('解析中...', 'ok');
     const data = await api('POST', '/api/dev/parse-product-excel', fd, true);
-    // 從 API 回傳建立 specRows（含多條件）
     const sm = await api('GET', '/api/dev/spec-map');
-    specRows = (data.rows || []).map(row => {
-      const raw = sm[row.spec];
-      let conditions;
-      if (Array.isArray(raw)) {
-        conditions = raw.map(c => ({ parent: c.parent||'', child: c.child||'', qty: c.qty||1 }));
-      } else if (raw) {
-        conditions = [{ parent: raw.parent||'', child: raw.child||'', qty: raw.qty||1 }];
-      } else {
-        conditions = [{ parent: '', child: '', qty: 1 }];
-      }
-      return { spec: row.spec, product_name: row.product_name||'', is_new: row.is_new, conditions };
-    });
+    const condOf = (spec) => {
+      const raw = sm[spec];
+      if (Array.isArray(raw)) return raw.map(c => ({ parent:c.parent||'', child:c.child||'', qty:c.qty||1 }));
+      if (raw) return [{ parent:raw.parent||'', child:raw.child||'', qty:raw.qty||1 }];
+      return [{ parent:'', child:'', qty:1 }];
+    };
+    const mkRow = (spec, pname) => ({ spec, product_name: pname||'', is_new: !sm[spec], conditions: condOf(spec) });
+    // 本次匯入檔出現的規格（聯集、已去重）
+    const importedKeys = new Set((data.rows || []).map(r => r.spec));
+    let allRows = (data.rows || []).map(r => mkRow(r.spec, r.product_name));
+    // 合併模式（未勾汰舊）：保留現有但不在本次檔案的規格；汰舊模式則自動丟棄。
+    if (!replaceMode) {
+      Object.keys(sm).forEach(spec => { if (!importedKeys.has(spec)) allRows.push(mkRow(spec, '')); });
+    }
+    specRows = allRows;
     renderSpecList();
     const sum = document.getElementById('spec-summary');
     const skipped  = data.skipped || [];
     const dupCount   = skipped.filter(s => s.type === 'duplicate').length;
-    const otherCount = skipped.length - dupCount;          // 商品名稱空白 / 無規格欄位
-    const newCount   = specRows.filter(r => r.is_new).length;   // 尚未設定
-    const setCount   = data.total - newCount;                   // 已設定
-    const totalRows  = (data.row_count != null) ? data.row_count : data.total;
+    const otherCount = skipped.length - dupCount;              // 檔案為空 / 商品名稱空白 / 無規格欄位
+    const newCount   = specRows.filter(r => r.is_new).length;  // 尚未設定（待填代碼）
+    const setCount   = specRows.length - newCount;             // 已設定（含自動沿用）
+    const droppedCount = replaceMode
+      ? Object.keys(sm).filter(spec => !importedKeys.has(spec)).length : 0;
     sum.style.display = 'block';
-    // 共 N 筆規格，X 筆重複，[M 筆無法匯入，]其中 A 筆已設定，B 筆尚未設定
-    let html = `共 <b>${totalRows}</b> 筆規格`;
+    let html = `匯入 <b>${files.length}</b> 個檔，`
+             + (replaceMode ? `<span style="color:#e55">汰舊模式</span>` : `合併模式`)
+             + `，對照表共 <b>${specRows.length}</b> 筆規格`;
     if (dupCount)   html += `，<span style="color:#e55">${dupCount} 筆重複</span>`;
     if (otherCount) html += `，<span style="color:#e55">${otherCount} 筆無法匯入</span>`;
     html += `，其中 <span style="color:var(--green)">${setCount} 筆已設定</span>`
           + `，<span style="color:var(--yellow)">${newCount} 筆尚未設定</span>`;
+    if (replaceMode && droppedCount)
+      html += `，<span style="color:#e55">將移除 ${droppedCount} 筆未匯入舊規格</span>`;
+    html += `<div style="margin-top:4px;font-size:12px;color:#888">記得按「💾 儲存對照」才會生效。</div>`;
     if (skipped.length) {
       html += `<ul style="margin:4px 0 0 18px;padding:0;font-size:12px;color:#888">`;
-      skipped.forEach(s => {
-        html += `<li>第 ${s.row} 列：${s.reason}${s.name ? '（' + s.name + '）' : ''}</li>`;
-      });
+      skipped.forEach(s => { html += `<li>${s.reason}${s.name ? '（' + s.name + '）' : ''}</li>`; });
       html += `</ul>`;
     }
     sum.innerHTML = html;
