@@ -1129,6 +1129,18 @@ async def download_all(job_id: str):
     with zipfile.ZipFile(buf, "w") as zf:
         for fname, data in job["file_bytes"].items():
             zf.writestr(fname, data)
+        # 一併打包原始輸入的訂單 Excel（統一輸出為 .xlsx）
+        used_names = set(job["file_bytes"].keys())
+        for item in job.get("excel_list", []):
+            base = os.path.splitext(item["name"])[0]
+            out_name = f"原始訂單_{base}.xlsx"
+            # 避免與既有檔名衝突
+            n = 1
+            while out_name in used_names:
+                n += 1
+                out_name = f"原始訂單_{base}({n}).xlsx"
+            used_names.add(out_name)
+            zf.writestr(out_name, item["bytes"])
     buf.seek(0)
     prefix = "順豐" if job.get("shipper") == "sf" else "超商"
     zipname = urllib.parse.quote(f'{prefix}_{datetime.now().strftime("%Y%m%d")}.zip')
