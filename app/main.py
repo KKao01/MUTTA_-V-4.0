@@ -1024,6 +1024,8 @@ def _collect_results(job, job_id, output_files, orders, log):
 
     job["file_bytes"] = file_bytes
     job["results"]    = results
+    # 訂單編號 → 已購買次數（供打包時回填原始輸入訂單 Excel）
+    job["oid_purchase"] = {o["oid"]: o.get("purchase_count", 0) for o in orders}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1119,6 +1121,40 @@ async def download_file_query(job_id: str, filename: str):
 async def download_file(job_id: str, filename: str):
     return _download_response(job_id, filename)
 
+def _annotate_excel_purchase(raw: bytes, oid_map: dict) -> bytes:
+    """在原始輸入訂單 Excel 末欄新增「已購買次數」，依訂單編號回填。
+    任何解析失敗則原樣回傳，確保打包不中斷。"""
+    if not oid_map:
+        return raw
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(BytesIO(raw))
+        ws = wb['Order'] if 'Order' in wb.sheetnames else wb.active
+        # 找出標題列的「訂單編號」欄
+        oid_col = None
+        for c in range(1, ws.max_column + 1):
+            v = ws.cell(1, c).value
+            if v is not None and str(v).strip() == '訂單編號':
+                oid_col = c
+                break
+        if oid_col is None:
+            return raw
+        new_col = ws.max_column + 1
+        ws.cell(1, new_col).value = '已購買次數'
+        for r in range(2, ws.max_row + 1):
+            oid = ws.cell(r, oid_col).value
+            if oid is None:
+                continue
+            oid = str(oid).strip()
+            if oid in oid_map:
+                ws.cell(r, new_col).value = oid_map[oid]
+        buf = BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+    except Exception:
+        return raw
+
+
 @app.get("/api/download-all/{job_id}")
 async def download_all(job_id: str):
     import zipfile
@@ -1129,8 +1165,9 @@ async def download_all(job_id: str):
     with zipfile.ZipFile(buf, "w") as zf:
         for fname, data in job["file_bytes"].items():
             zf.writestr(fname, data)
-        # 一併打包原始輸入的訂單 Excel（統一輸出為 .xlsx）
+        # 一併打包原始輸入的訂單 Excel（統一輸出為 .xlsx，並回填已購買次數）
         used_names = set(job["file_bytes"].keys())
+        oid_map = job.get("oid_purchase", {})
         for item in job.get("excel_list", []):
             base = os.path.splitext(item["name"])[0]
             out_name = f"原始訂單_{base}.xlsx"
@@ -1140,7 +1177,7 @@ async def download_all(job_id: str):
                 n += 1
                 out_name = f"原始訂單_{base}({n}).xlsx"
             used_names.add(out_name)
-            zf.writestr(out_name, item["bytes"])
+            zf.writestr(out_name, _annotate_excel_purchase(item["bytes"], oid_map))
     buf.seek(0)
     prefix = "順豐" if job.get("shipper") == "sf" else "超商"
     zipname = urllib.parse.quote(f'{prefix}_{datetime.now().strftime("%Y%m%d")}.zip')
